@@ -40,7 +40,7 @@ class ChartStorage(Storage):
             "username",
             payload.get("description", ""),
             payload['chart'],
-            payload['rendererId']
+            payload.get("rendererId", "")
         ))
         #return the chart_model for this newly stored chart
         return self.get_chart(chart_id)
