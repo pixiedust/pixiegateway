@@ -39,14 +39,14 @@ for v in someList:
 """
 },{
     "src":"""
-class Test(object):
+class Test:
     def foo(self):
         pass
 a = Test()
 a.foo()
 """,
     "target":"""
-class ns_Test(object):
+class ns_Test:
     def foo(self):
         pass
 ns_a = ns_Test()
