@@ -17,7 +17,11 @@
 from pixiegateway.notebookMgr import ast_parse, get_symbol_table, RewriteGlobals
 import astunparse
 from nose.tools import assert_equals
+import six
 
+classdef = ''
+if six.PY3:
+    classdef = '()'
 
 code_map = [
 {
@@ -39,14 +43,14 @@ for v in someList:
 """
 },{
     "src":"""
-class Test():
+class Test""" + classdef + """:
     def foo(self):
         pass
 a = Test()
 a.foo()
 """,
     "target":"""
-class ns_Test():
+class ns_Test""" + classdef + """:
     def foo(self):
         pass
 ns_a = ns_Test()
