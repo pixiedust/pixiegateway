@@ -9,7 +9,7 @@
         margin: 50px 0 0 0;
     }
     .adminOptions {
-        min-height: calc(100vh - 50px) !important;
+        height: calc(100vh - 50px) !important;
         background-color: #1D3649;
         padding: 50px 0 0 0 !important;
     }
@@ -51,15 +51,20 @@
         color: #888888;
         text-align: right;
     }
+    .admin-content-main {
+        max-height: calc(100vh - 100px);
+        overflow: auto;
+    }
     .pd-gateway-logo {
         text-align: center;
         padding: 25px;
     }
     #contents {
-        padding: 25px;
+        padding: 25px 25px 175px 25px;
     }
     .pd-gateway-list,
-    .pd-gateway-stats {
+    .pd-gateway-stats,
+    .pd-gateway-charts {
         margin: 25px 50px;
     }
     .table > tbody > tr > td,
@@ -79,6 +84,13 @@
     }
     .table a {
         color: darkorange;
+        cursor: pointer;
         font-weight: 500;
+    }
+    .pd-gateway-charts .popover {
+        min-width: 375px !important;
+    }
+    .pd-gateway-charts .popover .arrow {
+        display: none;
     }
 </style>
