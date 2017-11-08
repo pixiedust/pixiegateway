@@ -36,6 +36,9 @@ class ChartStorage(with_metaclass(ABCMeta)):
     @abstractmethod
     def list_charts(self):
         pass
+    @abstractmethod
+    def get_charts(self):
+        pass
 
 class SQLLiteChartStorage(ChartStorage, Storage):
     "Chart storage class for SQLLite PixieDust DB"
@@ -89,6 +92,12 @@ class SQLLiteChartStorage(ChartStorage, Storage):
                 SELECT * FROM {0}
             """.format(SQLLiteChartStorage.CHARTS_TBL_NAME),
             walker
+        )
+
+    def get_charts(self):
+        return self.fetchMany("""
+                SELECT CHARTID,AUTHOR,DATE,DESCRIPTION,RENDERERID FROM {0}
+            """.format(SQLLiteChartStorage.CHARTS_TBL_NAME)
         )
 
 chart_storage = SQLLiteChartStorage()

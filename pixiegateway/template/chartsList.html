@@ -1,0 +1,30 @@
+<div class="pd-gateway-charts">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Renderer</th>
+                <th>Author</th>
+                <th>Description</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in charts_list%}
+            <tr>
+                <td>{{c['DATE']}}</td>
+                <td>{{c['RENDERERID']}}</td>
+                <td>{{c['AUTHOR']}}</td>
+                <td>{{c['DESCRIPTION']}}</td>
+                <td>
+                    <a target="_blank" href="/chart/{{c['CHARTID']}}" tabindex="0">link</a> | 
+                    <a data-html="true" data-toggle="popover" title="{{c['CHARTID']}}" tabindex="0" 
+                        data-content='<object type="text/html" data="/embed/{{c['CHARTID']}}/300/200" width="300" height="200"></object>'>preview</a>
+                </td>
+            </tr>
+            {% end %}
+        </tbody>
+    </table>
+</div>
+
+{%include "chatsJS.html"%}

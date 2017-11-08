@@ -151,6 +151,8 @@ class AdminHandler(BaseHandler):
         tab_definitions = OrderedDict([
             ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",
                       "args": lambda: {"pixieapp_list":NotebookMgr.instance().notebook_pixieapps()}}),
+            ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts",
+                      "args": lambda: {"charts_list":chart_storage.get_charts()}}),
             ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"})
         ])
         tab_id = tab_id or "apps"
