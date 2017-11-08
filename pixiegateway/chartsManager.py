@@ -70,4 +70,10 @@ class ChartStorage(Storage):
             walker
         )
 
+    def get_charts(self):
+        return self.fetchMany("""
+                SELECT CHARTID,AUTHOR,DATE,DESCRIPTION,RENDERERID FROM {0}
+            """.format(ChartStorage.CHARTS_TBL_NAME)
+        )
+
 chart_storage = ChartStorage()

@@ -38,12 +38,14 @@
                 {%end%}
             </div>
 
-            {%include "logo.html"%}
+            <div class="admin-content-main">
+                {%include "logo.html"%}
 
-            <div id="contents">
-                {% set path = tab_definitions[selected_tab_id]['path'] %}
-                {% set args = tab_definitions[selected_tab_id]['args']() if 'args' in tab_definitions[selected_tab_id] else {} %}
-                {% module Template("template/" + path, **args) %}
+                <div id="contents">
+                    {% set path = tab_definitions[selected_tab_id]['path'] %}
+                    {% set args = tab_definitions[selected_tab_id]['args']() if 'args' in tab_definitions[selected_tab_id] else {} %}
+                    {% module Template("template/" + path, **args) %}
+                </div>
             </div>
         </div>
     </div>
