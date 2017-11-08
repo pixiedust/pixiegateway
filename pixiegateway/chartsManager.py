@@ -13,13 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -------------------------------------------------------------------------------
-from pixiedust.utils.storage import Storage
 import uuid
+from abc import ABCMeta, abstractmethod
+from six import with_metaclass
+from pixiedust.utils.storage import Storage
 
-class ChartStorage(Storage):
+class ChartStorage(with_metaclass(ABCMeta)):
+    """
+    Interface to the Chart Storage
+    """
+    @abstractmethod
+    def store_chart(self, payload):
+        "returns chart model"
+        pass
+    @abstractmethod
+    def get_chart(self, chart_id):
+        "returns chart model"
+        pass
+    @abstractmethod
+    def delete_chart(self, chart_id):
+        pass
+    @abstractmethod
+    def list_charts(self):
+        pass
+
+class SQLLiteChartStorage(ChartStorage, Storage):
+    "Chart storage class for SQLLite PixieDust DB"
     CHARTS_TBL_NAME="CHARTS"
     def __init__(self):
-        self._initTable( ChartStorage.CHARTS_TBL_NAME,
+        self._initTable( SQLLiteChartStorage.CHARTS_TBL_NAME,
         '''
             CHARTID        TEXT  NOT NULL PRIMARY KEY,
             AUTHOR         TEXT  NOT NULL,
@@ -31,11 +53,10 @@ class ChartStorage(Storage):
 
     def store_chart(self, payload):
         chart_id = str(uuid.uuid4())
-        print(chart_id.__class__)
         self.insert("""
             INSERT INTO {0} (CHARTID,AUTHOR,DATE,DESCRIPTION,CONTENT,RENDERERID)
             VALUES (?,?,CURRENT_TIMESTAMP,?,?,?)
-        """.format(ChartStorage.CHARTS_TBL_NAME), (
+        """.format(SQLLiteChartStorage.CHARTS_TBL_NAME), (
             chart_id,
             "username",
             payload.get("description", ""),
@@ -48,14 +69,14 @@ class ChartStorage(Storage):
     def get_chart(self, chart_id):
         return self.fetchOne(
             """SELECT * from {0} WHERE CHARTID='{1}'""".format(
-                ChartStorage.CHARTS_TBL_NAME, chart_id
+                SQLLiteChartStorage.CHARTS_TBL_NAME, chart_id
             )
         )
 
     def delete_chart(self, chart_id):
         rows_deleted = self.delete(
             """DELETE FROM {0} WHERE CHARTID='{1}'""".format(
-                ChartStorage.CHARTS_TBL_NAME, chart_id
+                SQLLiteChartStorage.CHARTS_TBL_NAME, chart_id
             )
         )
         print("Row Deleted: {}".format(rows_deleted))
@@ -66,8 +87,8 @@ class ChartStorage(Storage):
             print(row['CHARTID'])
         self.execute("""
                 SELECT * FROM {0}
-            """.format(ChartStorage.CHARTS_TBL_NAME),
+            """.format(SQLLiteChartStorage.CHARTS_TBL_NAME),
             walker
         )
 
-chart_storage = ChartStorage()
+chart_storage = SQLLiteChartStorage()
