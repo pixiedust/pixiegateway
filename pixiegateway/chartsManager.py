@@ -70,10 +70,16 @@ class ChartStorage(Storage):
             walker
         )
 
-    def get_charts(self):
-        return self.fetchMany("""
-                SELECT CHARTID,AUTHOR,DATE,DESCRIPTION,RENDERERID FROM {0}
-            """.format(ChartStorage.CHARTS_TBL_NAME)
+    def get_charts(self, page_num=0, page_size=10):
+        limit = max(1, page_size)
+        offset = limit * max(0, page_num)
+        charts_list = self.fetchMany("""
+                SELECT CHARTID,AUTHOR,DATE,DESCRIPTION,RENDERERID FROM {0} LIMIT {1} OFFSET {2}
+            """.format(ChartStorage.CHARTS_TBL_NAME, str(limit), str(offset))
         )
+
+        total_count = self.fetchOne('SELECT COUNT(CHARTID) as count from {0}'.format(ChartStorage.CHARTS_TBL_NAME))['count']
+
+        return {"page_num": page_num, "page_size": page_size, "total_count": total_count, "charts_list": charts_list}
 
 chart_storage = ChartStorage()
