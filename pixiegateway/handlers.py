@@ -221,7 +221,7 @@ class ChartEmbedHandler(BaseHandler):
 
 class ChartsHandler(BaseHandler):
     def get(self, page_num=0, page_size=10):
-        self.write(chart_storage.get_charts(int(page_num), int(page_size)))
+        self.write(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
 
 class StatsHandler(BaseHandler):
     """
