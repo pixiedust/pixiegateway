@@ -27,7 +27,7 @@ from six import PY3, iteritems
 from .session import SessionManager
 from .notebookMgr import NotebookMgr
 from .managedClient import ManagedClientPool
-from .chartsManager import chart_storage
+from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -175,7 +175,7 @@ class ChartShareHandler(BaseHandler):
     def post(self, chart_id):
         payload = json.loads(self.request.body.decode('utf-8'))
         try:
-            chart_model = chart_storage.store_chart(payload)
+            chart_model = SingletonChartStorage.instance().store_chart(payload)
             self.set_status(200)
             self.write(json.dumps(chart_model))
             self.finish()
@@ -184,7 +184,7 @@ class ChartShareHandler(BaseHandler):
             raise web.HTTPError(400, u'Share Chart error: {}'.format(exc))
 
     def get(self, chart_id):
-        chart_model = chart_storage.get_chart(chart_id)
+        chart_model = SingletonChartStorage.instance().get_chart(chart_id)
         if chart_model is not None:
             self.render("template/showChart.html", chart_model=chart_model)
         else:
@@ -193,7 +193,7 @@ class ChartShareHandler(BaseHandler):
 
 class ChartEmbedHandler(BaseHandler):
     def get(self, chart_id, width, height):
-        chart_model = chart_storage.get_chart(chart_id)
+        chart_model = SingletonChartStorage.instance().get_chart(chart_id)
         if chart_model is not None:
             if 'RENDERERID' in chart_model:
                 content = chart_model['CONTENT']
@@ -221,7 +221,7 @@ class ChartEmbedHandler(BaseHandler):
 
 class ChartsHandler(BaseHandler):
     def get(self, page_num=0, page_size=10):
-        self.write(chart_storage.get_charts(int(page_num), int(page_size)))
+        self.write(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
 
 class StatsHandler(BaseHandler):
     """
