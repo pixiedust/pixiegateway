@@ -14,9 +14,15 @@
 # limitations under the License.
 # -------------------------------------------------------------------------------
 import uuid
+import os
 from abc import ABCMeta, abstractmethod
+import requests
 from six import with_metaclass
 from pixiedust.utils.storage import Storage
+from traitlets.config.configurable import SingletonConfigurable
+from traitlets import Unicode, default, Integer
+from tornado.util import import_object
+from .pixieGatewayApp import PixieGatewayApp
 
 class ChartStorage(with_metaclass(ABCMeta)):
     """
@@ -41,7 +47,7 @@ class ChartStorage(with_metaclass(ABCMeta)):
         pass
 
 class SQLLiteChartStorage(ChartStorage, Storage):
-    "Chart storage class for SQLLite PixieDust DB"
+    "Chart storage class for SQLLite PixieDust DB (default)"
     CHARTS_TBL_NAME="CHARTS"
     def __init__(self):
         self._initTable( SQLLiteChartStorage.CHARTS_TBL_NAME,
@@ -100,4 +106,78 @@ class SQLLiteChartStorage(ChartStorage, Storage):
             """.format(SQLLiteChartStorage.CHARTS_TBL_NAME)
         )
 
-chart_storage = SQLLiteChartStorage()
+class CloudantChartStorage(ChartStorage):
+    class CloudantConfig(SingletonConfigurable):
+        def __init__(self, **kwargs):
+            kwargs['parent'] = PixieGatewayApp.instance()
+            super(CloudantChartStorage.CloudantConfig, self).__init__(**kwargs)
+
+        host = Unicode(None, config=True, help="Cloudant Chart Storage hostname")
+        protocol = Unicode("https", config=True, help="Cloudant Chart Storage protocol")
+        port = Integer(443, config=True, help="Cloudant Chart Storage port")
+        username = Unicode(None, config=True, help="Cloudant Chart Storage username")
+        password = Unicode(None, config=True, help="Cloudant Chart Storage password")
+
+        @default('host')
+        def host_default(self):
+            return os.getenv("PG_CLOUDANT_HOST", "")
+
+        @default('protocol')
+        def protocol_default(self):
+            return os.getenv("PG_CLOUDANT_PROTOCOL", "https")
+
+        @default('port')
+        def port_default(self):
+            return int(os.getenv("PG_CLOUDANT_PORT", 443))
+
+        @default('username')
+        def username_default(self):
+            return os.getenv("PG_CLOUDANT_USERNAME", "")
+
+        @default('password')
+        def password_default(self):
+            return os.getenv("PG_CLOUDANT_PASSWORD", "")
+
+    def __init__(self):
+        self.host = CloudantChartStorage.CloudantConfig.instance().host
+        self.protocol = CloudantChartStorage.CloudantConfig.instance().protocol
+        self.port = CloudantChartStorage.CloudantConfig.instance().port
+        self.username = CloudantChartStorage.CloudantConfig.instance().username
+        self.password = CloudantChartStorage.CloudantConfig.instance().password
+
+        print("Cloudant stuff: {} - {} - {} - {} - {}".format(self.host, self.protocol, self.port, self.username, self.password))
+
+    def store_chart(self, payload):
+        pass
+    def get_chart(self, chart_id):
+        pass
+    def delete_chart(self, chart_id):
+        pass
+    def list_charts(self):
+        pass
+    def get_charts(self):
+        pass
+
+class SingletonChartStorage(SingletonConfigurable):
+    """
+    Singleton use to access concrete instance of chart storage
+    """
+
+    chart_storage_class = Unicode(None, config=True, help="Chart storage class")
+
+    @default('chart_storage_class')
+    def chart_storage_class_default(self):
+        return os.getenv('PG_CHART_STORAGE', 'pixiegateway.chartsManager.SQLLiteChartStorage')
+
+    def __init__(self, **kwargs):
+        kwargs['parent'] = PixieGatewayApp.instance()
+        super(SingletonChartStorage, self).__init__(**kwargs)
+
+        self.chart_storage = import_object(self.chart_storage_class)()
+
+    def __getattr__(self, name):
+        if name == "chart_storage":
+            raise AttributeError("{0} attribute not found".format(name))
+        if self.chart_storage is not None and hasattr(self.chart_storage, name):
+            return getattr(self.chart_storage, name)
+        raise AttributeError("{0} attribute not found".format(name))

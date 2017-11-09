@@ -27,7 +27,7 @@ from six import PY3, iteritems
 from .session import SessionManager
 from .notebookMgr import NotebookMgr
 from .managedClient import ManagedClientPool
-from .chartsManager import chart_storage
+from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -152,7 +152,7 @@ class AdminHandler(BaseHandler):
             ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",
                       "args": lambda: {"pixieapp_list":NotebookMgr.instance().notebook_pixieapps()}}),
             ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts",
-                      "args": lambda: {"charts_list":chart_storage.get_charts()}}),
+                      "args": lambda: {"charts_list":SingletonChartStorage.instance().get_charts()}}),
             ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"})
         ])
         tab_id = tab_id or "apps"
@@ -176,7 +176,7 @@ class ChartShareHandler(BaseHandler):
     def post(self, chart_id):
         payload = json.loads(self.request.body.decode('utf-8'))
         try:
-            chart_model = chart_storage.store_chart(payload)
+            chart_model = SingletonChartStorage.instance().store_chart(payload)
             self.set_status(200)
             self.write(json.dumps(chart_model))
             self.finish()
@@ -185,7 +185,7 @@ class ChartShareHandler(BaseHandler):
             raise web.HTTPError(400, u'Share Chart error: {}'.format(exc))
 
     def get(self, chart_id):
-        chart_model = chart_storage.get_chart(chart_id)
+        chart_model = SingletonChartStorage.instance().get_chart(chart_id)
         if chart_model is not None:
             self.render("template/showChart.html", chart_model=chart_model)
         else:
@@ -194,7 +194,7 @@ class ChartShareHandler(BaseHandler):
 
 class ChartEmbedHandler(BaseHandler):
     def get(self, chart_id, width, height):
-        chart_model = chart_storage.get_chart(chart_id)
+        chart_model = SingletonChartStorage.instance().get_chart(chart_id)
         if chart_model is not None:
             if 'RENDERERID' in chart_model:
                 content = chart_model['CONTENT']
