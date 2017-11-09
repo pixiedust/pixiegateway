@@ -43,7 +43,7 @@ class ChartStorage(with_metaclass(ABCMeta)):
     def list_charts(self):
         pass
     @abstractmethod
-    def get_charts(self):
+    def get_charts(self, page_num=0, page_size=10):
         pass
 
 class SQLLiteChartStorage(ChartStorage, Storage):
@@ -100,11 +100,17 @@ class SQLLiteChartStorage(ChartStorage, Storage):
             walker
         )
 
-    def get_charts(self):
-        return self.fetchMany("""
-                SELECT CHARTID,AUTHOR,DATE,DESCRIPTION,RENDERERID FROM {0}
-            """.format(SQLLiteChartStorage.CHARTS_TBL_NAME)
+    def get_charts(self, page_num=0, page_size=10):
+        limit = max(1, page_size)
+        offset = limit * max(0, page_num)
+        charts_list = self.fetchMany("""
+                SELECT CHARTID,AUTHOR,DATE,DESCRIPTION,RENDERERID FROM {0} LIMIT {1} OFFSET {2}
+            """.format(ChartStorage.CHARTS_TBL_NAME, str(limit), str(offset))
         )
+
+        total_count = self.fetchOne('SELECT COUNT(CHARTID) as count from {0}'.format(ChartStorage.CHARTS_TBL_NAME))['count']
+
+        return {"page_num": page_num, "page_size": page_size, "total_count": total_count, "charts_list": charts_list}
 
 class CloudantChartStorage(ChartStorage):
     class CloudantConfig(SingletonConfigurable):
@@ -155,7 +161,7 @@ class CloudantChartStorage(ChartStorage):
         pass
     def list_charts(self):
         pass
-    def get_charts(self):
+    def get_charts(self, page_num=0, page_size=10):
         pass
 
 class SingletonChartStorage(SingletonConfigurable):
@@ -181,3 +187,5 @@ class SingletonChartStorage(SingletonConfigurable):
         if self.chart_storage is not None and hasattr(self.chart_storage, name):
             return getattr(self.chart_storage, name)
         raise AttributeError("{0} attribute not found".format(name))
+
+#chart_storage = ChartStorage()

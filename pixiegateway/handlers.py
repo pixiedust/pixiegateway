@@ -151,8 +151,7 @@ class AdminHandler(BaseHandler):
         tab_definitions = OrderedDict([
             ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",
                       "args": lambda: {"pixieapp_list":NotebookMgr.instance().notebook_pixieapps()}}),
-            ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts",
-                      "args": lambda: {"charts_list":SingletonChartStorage.instance().get_charts()}}),
+            ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts"}),
             ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"})
         ])
         tab_id = tab_id or "apps"
@@ -219,6 +218,10 @@ class ChartEmbedHandler(BaseHandler):
         else:
             self.set_status(404)
             self.write("Chart not found")
+
+class ChartsHandler(BaseHandler):
+    def get(self, page_num=0, page_size=10):
+        self.write(chart_storage.get_charts(int(page_num), int(page_size)))
 
 class StatsHandler(BaseHandler):
     """
