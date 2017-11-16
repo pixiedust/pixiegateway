@@ -172,10 +172,11 @@ class PixieAppPublishHandler(BaseHandler):
             raise web.HTTPError(400, u'Publish PixieApp error: {}'.format(exc))
 
 class ChartShareHandler(BaseHandler):
+    @gen.coroutine
     def post(self, chart_id):
         payload = json.loads(self.request.body.decode('utf-8'))
         try:
-            chart_model = SingletonChartStorage.instance().store_chart(payload)
+            chart_model = yield gen.maybe_future(SingletonChartStorage.instance().store_chart(payload))
             self.set_status(200)
             self.write(json.dumps(chart_model))
             self.finish()
@@ -183,17 +184,20 @@ class ChartShareHandler(BaseHandler):
             print(traceback.print_exc())
             raise web.HTTPError(400, u'Share Chart error: {}'.format(exc))
 
+    @gen.coroutine
     def get(self, chart_id):
-        chart_model = SingletonChartStorage.instance().get_chart(chart_id)
+        chart_model = yield gen.maybe_future(SingletonChartStorage.instance().get_chart(chart_id))
         if chart_model is not None:
             self.render("template/showChart.html", chart_model=chart_model)
         else:
             self.set_status(404)
             self.write("Chart not found")
+            self.finish()
 
 class ChartEmbedHandler(BaseHandler):
+    @gen.coroutine
     def get(self, chart_id, width, height):
-        chart_model = SingletonChartStorage.instance().get_chart(chart_id)
+        chart_model = yield gen.maybe_future(SingletonChartStorage.instance().get_chart(chart_id))
         if chart_model is not None:
             if 'RENDERERID' in chart_model:
                 content = chart_model['CONTENT']
@@ -218,10 +222,13 @@ class ChartEmbedHandler(BaseHandler):
         else:
             self.set_status(404)
             self.write("Chart not found")
+            self.finish()
 
 class ChartsHandler(BaseHandler):
+    @gen.coroutine
     def get(self, page_num=0, page_size=10):
-        self.write(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
+        payload = yield gen.maybe_future(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
+        self.write(payload)
 
 class StatsHandler(BaseHandler):
     """

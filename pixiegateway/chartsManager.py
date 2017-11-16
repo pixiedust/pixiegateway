@@ -17,15 +17,18 @@ import uuid
 import base64
 import os
 from abc import ABCMeta, abstractmethod
-import requests
 import time
 import datetime
-from six import with_metaclass, iteritems
+import requests
+from six import with_metaclass, iteritems, string_types
 from pixiedust.utils.storage import Storage
 from traitlets.config.configurable import SingletonConfigurable
 from traitlets import Unicode, default, Integer
+from tornado import gen
+from tornado.escape import json_decode, json_encode
 from tornado.util import import_object
 from tornado.log import app_log
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from .pixieGatewayApp import PixieGatewayApp
 
 class ChartStorage(with_metaclass(ABCMeta)):
@@ -150,6 +153,7 @@ class CloudantChartStorage(ChartStorage):
             return os.getenv("PG_CLOUDANT_PASSWORD", "")
 
     def __init__(self):
+        self.http_client = AsyncHTTPClient()
         self.host = CloudantChartStorage.CloudantConfig.instance().host
         self.protocol = CloudantChartStorage.CloudantConfig.instance().protocol
         self.port = CloudantChartStorage.CloudantConfig.instance().port
@@ -169,15 +173,16 @@ class CloudantChartStorage(ChartStorage):
     def get_headers(self):
         return {
             'Authorization': 'Basic {}'.format(base64.b64encode('{}:{}'.format(self.username, self.password).encode()).decode()),
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
         }
 
     def build_url(self, path="", **kwargs):
         url = "{}://{}:{}/{}/{}".format(self.protocol, self.host, self.port, CloudantChartStorage.CHART_DB_NAME, path)
         return url if len(kwargs)==0 else "{}?{}".format(url,"&".join(["{}={}".format(k,v) for k,v in iteritems(kwargs)]))
 
+    @gen.coroutine
     def store_chart(self, payload):
-
         chart_id = str(uuid.uuid4())
         payload = {
             '_id': chart_id,
@@ -189,38 +194,50 @@ class CloudantChartStorage(ChartStorage):
             'RENDERERID': payload.get("rendererId", "")
         }
 
-        response = requests.post(self.build_url(), json = payload, headers=self.get_headers())
-        if not response.ok:
-            raise Exception(response.text)
+        response = yield self.http_client.fetch(
+            HTTPRequest(self.build_url(), method='POST', headers=self.get_headers(), body=json_encode(payload))
+        )
+        if response.error is not None:
+            raise response.error
         #return the chart_model for this newly stored chart
-        return payload
+        raise gen.Return(payload)
 
     def format_chart_model(self, chart_model):
         chart_model['DATE'] = datetime.datetime.fromtimestamp(chart_model['DATE']).strftime("%Y-%m-%d %H:%M:%S")
         return chart_model
 
+    def to_json(self, payload):
+        if not isinstance(payload, string_types):
+            import codecs
+            payload = codecs.decode(payload, 'utf-8')
+        return json_decode(payload)
+
+    @gen.coroutine
     def get_chart(self, chart_id):
-        return self.format_chart_model(requests.get(self.build_url(chart_id), headers=self.get_headers()).json())
+        response = yield self.http_client.fetch(self.build_url(chart_id), headers=self.get_headers())
+        raise gen.Return(self.to_json(response.body))
 
     def delete_chart(self, chart_id):
-        response = requests.delete(self.build_url(chart_id), headers = self.get_headers())
+        response = requests.delete(self.build_url(chart_id), headers=self.get_headers())
         if not response.ok:
             raise Exception(response.text)
 
     def list_charts(self):
         return self.get_charts()
 
+    @gen.coroutine
     def get_charts(self, page_num=0, page_size=10):
         limit = max(1, page_size)
         offset = limit * max(0, page_num)
         url = self.build_url("_all_docs", limit=limit, skip=offset, include_docs="true")
-        payload = requests.get(url, headers=self.get_headers()).json()
-        return {
-            "page_num": page_num, 
-            "page_size": page_size, 
-            "total_count": payload['total_rows'], 
+        response = yield self.http_client.fetch(url, headers=self.get_headers())
+        payload = self.to_json(response.body)
+        raise gen.Return({
+            "page_num": page_num,
+            "page_size": page_size,
+            "total_count": payload['total_rows'],
             "charts_list": [self.format_chart_model(row['doc']) for row in payload['rows']]
-        }
+        })
 
 class SingletonChartStorage(SingletonConfigurable):
     """
