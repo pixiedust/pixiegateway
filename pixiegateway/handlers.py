@@ -255,7 +255,7 @@ class OEmbedChartHandler(BaseHandler):
             "width": width,
             "height": height,
             "title": "Title",
-            "url": url,
+            #"url": url,
             "author_name": "username",
             "provider_name": "PixieGateway",
             "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
