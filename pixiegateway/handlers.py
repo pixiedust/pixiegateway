@@ -236,6 +236,11 @@ class OEmbedChartHandler(BaseHandler):
         chartid = match.group('chartid')
         width = 600
         height = 400
+        height_ratio = min(int(self.get_query_argument("maxheight", height)), height)/height
+        width_ratio = min(int(self.get_query_argument("maxwidth", width)), width)/width
+
+        width = int(width * min(height_ratio, width_ratio))
+        height = int(height * min(height_ratio, width_ratio))
         html = """
         <object type="text/html" data="{server}/embed/{chartid}/{width}/{height}" width="{width}" height="{height}">
             <a href="{server}/embed/{chartid}">View Chart</a>' +
