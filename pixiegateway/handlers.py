@@ -248,6 +248,7 @@ class OEmbedChartHandler(BaseHandler):
         """.format(server=server, chartid=chartid, width=width, height=height)
 
         html = "<div>Hello world html oembed rendering</div>"
+        self.set_header('Content-Type', 'application/json')
         self.write({
             "version": "1.0",
             "type": "rich",
