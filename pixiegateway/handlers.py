@@ -246,6 +246,8 @@ class OEmbedChartHandler(BaseHandler):
             <a href="{server}/embed/{chartid}">View Chart</a>' +
         </object>
         """.format(server=server, chartid=chartid, width=width, height=height)
+
+        html = "<div>Hello world html oembed rendering</div>"
         self.write({
             "version": "1.0",
             "type": "rich",
