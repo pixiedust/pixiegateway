@@ -248,7 +248,6 @@ class OEmbedChartHandler(BaseHandler):
         """.format(server=server, chartid=chartid, width=width, height=height)
 
         html = "<div>Hello world html oembed rendering</div>"
-        self.set_header('Content-Type', 'application/json')
         self.write({
             "version": "1.0",
             "type": "rich",
@@ -261,6 +260,7 @@ class OEmbedChartHandler(BaseHandler):
             "provider_name": "PixieGateway",
             "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
         })
+        self.set_header('Content-Type', 'application/json')
 
 class ChartsHandler(BaseHandler):
     @gen.coroutine
