@@ -248,18 +248,20 @@ class OEmbedChartHandler(BaseHandler):
         """.format(server=server, chartid=chartid, width=width, height=height)
 
         html = "<div>Hello world html oembed rendering</div>"
-        self.write({
-            "version": "1.0",
-            "type": "rich",
-            "html": html,
-            "width": width,
-            "height": height,
-            "title": "Title",
-            #"url": url,
-            "author_name": "username",
-            "provider_name": "PixieGateway",
-            "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
-        })
+        # self.write({
+        #     "version": "1.0",
+        #     "type": "rich",
+        #     "html": html,
+        #     "width": width,
+        #     "height": height,
+        #     "title": "Title",
+        #     #"url": url,
+        #     "author_name": "username",
+        #     "provider_name": "PixieGateway",
+        #     "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
+        # })
+        payload = """{"type":"photo","flickr_type":"photo","title":"Cat","author_name":"kb_vaidya","author_url":"https:\/\/www.flickr.com\/photos\/kvaidya\/","width":"1024","height":"683","url":"https:\/\/farm6.staticflickr.com\/5598\/14934282524_344c84246b_b.jpg","web_page":"https:\/\/www.flickr.com\/photos\/kvaidya\/14934282524\/","thumbnail_url":"https:\/\/farm6.staticflickr.com\/5598\/14934282524_344c84246b_q.jpg","thumbnail_width":150,"thumbnail_height":150,"web_page_short_url":"https:\/\/flic.kr\/p\/oKG6TJ","license":"All Rights Reserved","license_id":0,"html":"<a data-flickr-embed=\"true\" href=\"https:\/\/www.flickr.com\/photos\/kvaidya\/14934282524\/\" title=\"Cat by kb_vaidya, on Flickr\"><img src=\"https:\/\/farm6.staticflickr.com\/5598\/14934282524_344c84246b_b.jpg\" width=\"1024\" height=\"683\" alt=\"Cat\"><\/a><script async src=\"https:\/\/embedr.flickr.com\/assets\/client-code.js\" charset=\"utf-8\"><\/script>","version":"1.0","cache_age":3600,"provider_name":"Flickr","provider_url":"https:\/\/www.flickr.com\/"}"""
+        self.write(payload)
         self.set_header('Content-Type', 'application/json')
 
 class ChartsHandler(BaseHandler):
