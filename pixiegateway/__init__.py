@@ -26,7 +26,7 @@ from .notebookMgr import NotebookMgr
 from .handlers import (
     PixieDustHandler, PixieDustLogHandler, ExecuteCodeHandler, PixieAppHandler,
     PixieAppListHandler, PixieAppPublishHandler, ChartShareHandler, StatsHandler,
-    AdminHandler, ChartEmbedHandler, ChartsHandler
+    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler
 )
 
 def main():
@@ -64,6 +64,7 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
             (r"/publish/(?P<name>(?:.*))", PixieAppPublishHandler),
             (r"/chart(?:/(?P<chart_id>(?:.*))?)?", ChartShareHandler),
             (r"/embed(?:/(?P<chart_id>[^/]*)(?:/(?P<width>\d+))?(?:/(?P<height>\d+))?)?", ChartEmbedHandler),
+            (r"/oembed/chart", OEmbedChartHandler),
             (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler, {"km":self.parent.kernel_manager}),
             (r"/charts(?:/(?P<page_num>[^/]*)(?:/(?P<page_size>\d+))?)?", ChartsHandler)
         ]

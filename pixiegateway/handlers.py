@@ -24,6 +24,7 @@ import tornado
 from tornado import gen, web
 from tornado.log import app_log
 from six import PY3, iteritems
+from six.moves.urllib import parse
 from .session import SessionManager
 from .notebookMgr import NotebookMgr
 from .managedClient import ManagedClientPool
@@ -223,6 +224,35 @@ class ChartEmbedHandler(BaseHandler):
             self.set_status(404)
             self.write("Chart not found")
             self.finish()
+
+class OEmbedChartHandler(BaseHandler):
+    def get(self):
+        url = self.get_query_argument("url")
+        server = self.request.protocol + "://" + self.request.host
+        match = re.match("/chart/(?P<chartid>.*)", parse.urlparse(url).path)
+        if match is None:
+            self.set_status(404)
+            return self.write("Invalid url {}".format(url))
+        chartid = match.group('chartid')
+        width = 600
+        height = 400
+        html = """
+        <object type="text/html" data="{server}/embed/{chartid}/{width}/{height}" width="{width}" height="{height}">
+            <a href="{server}/embed/{chartid}">View Chart</a>' +
+        </object>
+        """.format(server=server, chartid=chartid, width=width, height=height)
+        self.write({
+            "version": "1.0",
+            "type": "rich",
+            "html": html,
+            "width": width,
+            "height": height,
+            "title": "Title",
+            "url": url,
+            "author_name": "username",
+            "provider_name": "PixieGateway",
+            "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
+        })
 
 class ChartsHandler(BaseHandler):
     @gen.coroutine
