@@ -18,6 +18,7 @@ import json
 import inspect
 import os
 import re
+import base64
 from collections import OrderedDict
 import nbformat
 import tornado
@@ -188,12 +189,24 @@ class ChartShareHandler(BaseHandler):
     @gen.coroutine
     def get(self, chart_id):
         chart_model = yield gen.maybe_future(SingletonChartStorage.instance().get_chart(chart_id))
-        if chart_model is not None:
-            self.render("template/showChart.html", chart_model=chart_model)
-        else:
+        if chart_model is None:
             self.set_status(404)
-            self.write("Chart not found")
+            self.write("Chart not found {}".format(chart_id))
             self.finish()
+
+        fmt = self.get_query_argument("format", "")
+        if fmt == "thumbnail":
+            thumbnail = chart_model.get("THUMBNAIL", None)
+            if thumbnail is None:
+                from .chartThumbnail import Thumbnail
+                thumbnail = yield Thumbnail( chart_model ).get_screenshot_as_png()
+            else:
+                thumbnail = base64.b64decode(thumbnail)
+            self.set_header('Content-Type', 'image/png')
+            self.write(thumbnail)
+            self.finish()
+        else:
+            self.render("template/showChart.html", chart_model=chart_model)
 
 class ChartEmbedHandler(BaseHandler):
     @gen.coroutine
@@ -246,21 +259,18 @@ class OEmbedChartHandler(BaseHandler):
             <a href="{server}/embed/{chartid}">View Chart</a>' +
         </object>
         """.format(server=server, chartid=chartid, width=width, height=height)
-
-        html = "<div>Hello world html oembed rendering</div>"
-        # self.write({
-        #     "version": "1.0",
-        #     "type": "rich",
-        #     "html": html,
-        #     "width": width,
-        #     "height": height,
-        #     "title": "Title",
-        #     #"url": url,
-        #     "author_name": "username",
-        #     "provider_name": "PixieGateway",
-        #     "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
-        # })
-        payload = """{"type":"photo","flickr_type":"photo","title":"Cat","author_name":"kb_vaidya","author_url":"https:\/\/www.flickr.com\/photos\/kvaidya\/","width":"1024","height":"683","url":"https:\/\/farm6.staticflickr.com\/5598\/14934282524_344c84246b_b.jpg","web_page":"https:\/\/www.flickr.com\/photos\/kvaidya\/14934282524\/","thumbnail_url":"https:\/\/farm6.staticflickr.com\/5598\/14934282524_344c84246b_q.jpg","thumbnail_width":150,"thumbnail_height":150,"web_page_short_url":"https:\/\/flic.kr\/p\/oKG6TJ","license":"All Rights Reserved","license_id":0,"html":"<a data-flickr-embed=\"true\" href=\"https:\/\/www.flickr.com\/photos\/kvaidya\/14934282524\/\" title=\"Cat by kb_vaidya, on Flickr\"><img src=\"https:\/\/farm6.staticflickr.com\/5598\/14934282524_344c84246b_b.jpg\" width=\"1024\" height=\"683\" alt=\"Cat\"><\/a><script async src=\"https:\/\/embedr.flickr.com\/assets\/client-code.js\" charset=\"utf-8\"><\/script>","version":"1.0","cache_age":3600,"provider_name":"Flickr","provider_url":"https:\/\/www.flickr.com\/"}"""
+        payload = {
+            "version": "1.0",
+            "type": "rich",
+            "html": html,
+            "width": width,
+            "height": height,
+            "title": "Title",
+            "url": url,
+            "author_name": "username",
+            "provider_name": "PixieGateway",
+            "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
+        }
         self.write(payload)
         self.set_header('Content-Type', 'application/json')
 

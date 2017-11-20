@@ -53,7 +53,8 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
         `base_url` traitlet value."""
         pixiedust_home = os.environ.get("PIXIEDUST_HOME", os.path.expanduser('~'))
         return [
-            (r"/static/(.*)", tornado.web.StaticFileHandler, {'path': os.path.join( pixiedust_home, 'static')}),
+            (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
+            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
             (r"/pixiedustLog", PixieDustLogHandler),
             (r"/pixiedust.js", PixieDustHandler, {'loadjs':True}),
             (r"/pixiedust.css", PixieDustHandler, {'loadjs':False}),

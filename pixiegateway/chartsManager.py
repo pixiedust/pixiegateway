@@ -39,6 +39,11 @@ class ChartStorage(with_metaclass(ABCMeta)):
     def store_chart(self, payload):
         "returns chart model"
         pass
+
+    @abstractmethod
+    def update_chart(self, payload):
+        "Update the chart model"
+        pass
     @abstractmethod
     def get_chart(self, chart_id):
         "returns chart model"
@@ -64,7 +69,8 @@ class SQLLiteChartStorage(ChartStorage, Storage):
             DATE           DATETIME  NOT NULL,
             DESCRIPTION    TEXT,
             CONTENT        BLOB,
-            RENDERERID     TEXT
+            RENDERERID     TEXT,
+            THUMBNAIL      BLOB
         ''')
 
     def store_chart(self, payload):
@@ -80,6 +86,18 @@ class SQLLiteChartStorage(ChartStorage, Storage):
             payload.get("rendererId", "")
         ))
         #return the chart_model for this newly stored chart
+        return self.get_chart(chart_id)
+
+    def update_chart(self, payload):
+        chart_id = payload['CHARTID']
+        self.update("""
+            UPDATE {0} 
+            SET THUMBNAIL = ?
+            WHERE CHARTID = ?;
+        """.format(SQLLiteChartStorage.CHARTS_TBL_NAME), (
+            payload.get("THUMBNAIL", ""),
+            chart_id
+        ))
         return self.get_chart(chart_id)
 
     def get_chart(self, chart_id):
@@ -198,6 +216,18 @@ class CloudantChartStorage(ChartStorage):
             HTTPRequest(self.build_url(), method='POST', headers=self.get_headers(), body=json_encode(payload))
         )
         if response.error is not None:
+            raise response.error
+        #return the chart_model for this newly stored chart
+        raise gen.Return(payload)
+
+    @gen.coroutine
+    def update_chart(self, payload):
+        chart_id = payload["CHARTID"]
+        response = yield self.http_client.fetch(
+            HTTPRequest(self.build_url(chart_id), method='PUT', headers=self.get_headers(), body=json_encode(payload))
+        )
+        if response.error is not None:
+            print("Error occurred updating to couch: {}".format(response.text))
             raise response.error
         #return the chart_model for this newly stored chart
         raise gen.Return(payload)
