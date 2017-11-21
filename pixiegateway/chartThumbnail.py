@@ -21,6 +21,7 @@ from tornado import template, gen
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+import pixiegateway
 from .chartsManager import SingletonChartStorage
 
 class Thumbnail(object):
@@ -31,13 +32,14 @@ class Thumbnail(object):
     def get_screenshot_as_png(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
         chromedriver_path = None
         if sys.platform == "linux" or sys.platform == "linux2":
             from pixiegateway.webdriver import linux
-            chromedriver_path = os.path.join(os.path.split(linux.__file__)[0], "chromedriver")
+            chromedriver_path = os.path.join(os.path.dirname(linux.__file__), "chromedriver")
         elif sys.platform == "darwin":
             from pixiegateway.webdriver import mac
-            chromedriver_path = os.path.join(os.path.split(mac.__file__)[0], "chromedriver")
+            chromedriver_path = os.path.join(os.path.dirname(mac.__file__), "chromedriver")
         if chromedriver_path is None:
             raise Exception("Unable to generate chart thumbnail. Invalid platform: {}".format(sys.platform))
 
@@ -46,7 +48,9 @@ class Thumbnail(object):
             chrome_options=chrome_options
         )
         try:
-            script = template.Loader("pixiegateway/template").load("genThumbnail.html").generate(
+            template_path = os.path.join(os.path.dirname(pixiegateway.__file__), "template")
+            print(template_path)
+            script = template.Loader(template_path).load("genThumbnail.html").generate(
                 chart_model=self.chart_model
             )
             with tempfile.NamedTemporaryFile(delete=True) as f:
@@ -69,5 +73,5 @@ class Thumbnail(object):
     def save_thumbnail_to_model(self, driver):
         b64_thumbnail = driver.get_screenshot_as_base64()
         self.chart_model["THUMBNAIL"] = b64_thumbnail
-        yield SingletonChartStorage.instance().update_chart(self.chart_model)
+        yield gen.maybe_future(SingletonChartStorage.instance().update_chart(self.chart_model))
         raise gen.Return(base64.b64decode(b64_thumbnail))
