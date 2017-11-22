@@ -199,7 +199,7 @@ class ChartShareHandler(BaseHandler):
             thumbnail = chart_model.get("THUMBNAIL", None)
             if thumbnail is None:
                 from .chartThumbnail import Thumbnail
-                thumbnail = yield Thumbnail( chart_model ).get_screenshot_as_png()
+                thumbnail = yield Thumbnail.instance().get_screenshot_as_png(chart_model)
             else:
                 thumbnail = base64.b64decode(thumbnail)
             self.set_header('Content-Type', 'image/png')
