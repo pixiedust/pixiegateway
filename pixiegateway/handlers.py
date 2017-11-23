@@ -19,7 +19,7 @@ import inspect
 import os
 import re
 import base64
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import nbformat
 import tornado
 from tornado import gen, web
@@ -31,6 +31,7 @@ from .notebookMgr import NotebookMgr
 from .managedClient import ManagedClientPool
 from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
+from .pixieGatewayApp import PixieGatewayApp
 
 class BaseHandler(tornado.web.RequestHandler):
     def initialize(self):
@@ -149,12 +150,17 @@ class PixieAppListHandler(BaseHandler):
         self.redirect("/admin/apps")
 
 class AdminHandler(BaseHandler):
+    def fetch_logs(self):
+        with open( PixieGatewayApp.instance().log_path) as f:
+            return "\n".join(deque(f, 100))
     def get(self, tab_id):
         tab_definitions = OrderedDict([
             ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",
                       "args": lambda: {"pixieapp_list":NotebookMgr.instance().notebook_pixieapps()}}),
             ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts"}),
-            ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"})
+            ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"}),
+            ("logs", {"name": "Server Logs", "path": "adminLogs.html", "description": "Server logs",
+                      "args": lambda: {"logs": self.fetch_logs()}})
         ])
         tab_id = tab_id or "apps"
         self.render("template/adminConsole.html", tab_definitions=tab_definitions, selected_tab_id=tab_id)
