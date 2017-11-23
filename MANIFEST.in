@@ -1,4 +1,6 @@
 recursive-include pixiegateway template/*
+recursive-include pixiegateway webdriver/*/*
+recursive-include pixiegateway static/*
 recursive-exclude * __pycache__
 recursive-exclude * *.pyc
 recursive-exclude * *.pyo

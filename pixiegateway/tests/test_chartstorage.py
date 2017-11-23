@@ -1,4 +1,3 @@
-
 # -------------------------------------------------------------------------------
 # Copyright IBM Corp. 2017
 # 
@@ -15,6 +14,7 @@
 # limitations under the License.
 # -------------------------------------------------------------------------------
 from pixiegateway.chartsManager import SingletonChartStorage
+# from pixiegateway.chartThumbnail import Thumbnail
 from nose.tools import assert_equals
 
 def test_store_chart():
@@ -42,6 +42,9 @@ def do_store_chart(payload):
     chart_model = SingletonChartStorage.instance().store_chart(payload)
     #check that the chart_model is good
     fetched_model = SingletonChartStorage.instance().get_chart(chart_model['CHARTID'])
+    # Make sure chrome is properly install on travis before enabling these lines
+    # thumbnail = Thumbnail.instance().get_screenshot_as_png(fetched_model)
+    # ok_( thumbnail is not None, "Thumbnail should not be None")
     assert_equals(payload['chart'], fetched_model['CONTENT'])
     assert_equals( SingletonChartStorage.instance().delete_chart(chart_model['CHARTID']), 1)
 
