@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    {%include adminCSS.html%}
+    <style type="text/css">
+html,body {
+  height: 100%;
+}
+
+.loginbox {
+  display: flex;
+  flex-flow: column;
+  height: 100%;
+}
+.loginbox .header {
+  flex: 1 1 40px;
+}
+
+.loginbox .content {
+  flex: 0 0 400px;
+  width: 500px;
+  height: 400px;
+  margin-left: auto;
+  margin-right: auto;
+  background-color: ivory;
+  border-radius: 20px;
+  box-shadow: 5px 5px darkgrey;
+  border: 1px solid grey;
+}
+
+.loginbox .content .login{
+  margin: 20px;
+  color: rgb(50, 50, 50);
+  height: calc(100% - 70px);
+}
+
+.loginbox .footer {
+  flex: 1 1 40px;
+}
+
+.loginheader{
+    font-weight: 400;
+    font-size: 25px;
+    line-height: 1.2;
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+.logininput{
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+.logininput label{
+    display: block;
+    padding-left: 2px;
+    padding-bottom: 2px;
+    font-weight: 700;
+}
+
+.logininput input{
+    display: block;
+    padding-left: 5px;
+    padding-bottom: 2px;
+    padding-top:2px;
+    height:30px;
+    width:100%;
+    border: 1px solid #a6a6a6;
+    border-top-color: #949494;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 rgba(255,255,255,.5), 0 1px 0 rgba(0,0,0,.07) inset;
+    outline: 0;
+    font-size: large;
+}
+
+.login button[type=submit]{
+    width: 10em;
+    height: 3em;
+    border-radius: 10px;
+    background-color: aliceblue;
+}
+
+.error{
+    margin-left:30px;
+    color:red;
+}
+
+    </style>
+</head>
+<body>
+    <div class="loginbox">
+        <div class="header">
+            {%include "logo.html"%}
+        </div>
+        <div class="content">
+            <div class="login">
+                <form id="loginform" name="login" method="post" action="{{request.uri}}">
+                    <h1 class="loginheader">Sign in to PixieGateway</h1>
+
+                    <div class="logininput">
+                        <label>User Id</label>
+                        <input type="text" name="userid">
+                    </div>
+                    <div class="logininput">
+                        <label>Password:</label>
+                        <input type="password" name="password">
+                    </div>                    
+                    <input type="hidden" name="next" value="{{handler.get_argument('next')}}">
+                    {% module xsrf_form_html() %}
+                    <div style="text-align:center">
+                        <button type="submit" value="login" id="submit">Submit</button>
+                    </div>
+                </form>
+            </div>
+            <div class="error">
+                {% try %}
+                    {{error}}
+                {%except%}
+                {%end%}
+            </div>
+        </div>
+        <div class="footer">
+        </div>
+    </div>
+</body>
+</html>

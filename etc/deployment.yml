@@ -13,3 +13,20 @@ spec:
         - name: pixiegateway
           image: dtaieb/pixiegateway-python35
           imagePullPolicy: Always
+          env:
+            - name: ADMIN_USERID
+              value: admin
+            - name: ADMIN_PASSWORD
+              value: changeme
+            #- name: PG_CHART_STORAGE
+            #  value: pixiegateway.chartsManager.CloudantChartStorage
+            #- name: PG_CLOUDANT_HOST
+            #  value: <your cloudant host>
+            #- name: PG_CLOUDANT_PORT
+            #  value: "443"
+            #- name: PG_CLOUDANT_PROTOCOL
+            #  value: https
+            #- name: PG_CLOUDANT_USERNAME
+            #  value: <your cloudant username>
+            #- name: PG_CLOUDANT_PASSWORD
+            #  value: <your cloudant password>

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -------------------------------------------------------------------------------
+# pylint: disable=W0223
+
 import traceback
 import json
 import inspect
@@ -34,6 +36,7 @@ from .utils import sanitize_traceback
 from .pixieGatewayApp import PixieGatewayApp
 
 class BaseHandler(tornado.web.RequestHandler):
+    """Base class for all PixieGateway handler"""
     def initialize(self):
         pass
 
@@ -54,10 +57,34 @@ class BaseHandler(tornado.web.RequestHandler):
         self.session = SessionManager.instance().get_session(self)
         app_log.debug("session %s", self.session)
 
+    def get_current_user(self):
+        return self.get_secure_cookie("pd_user")
+
     def set_default_headers(self):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Headers", "x-requested-with")
         self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+
+class TemplateDispatcherHandler(BaseHandler):
+    """
+    Generic handler that renders through a template
+    """
+    def initialize(self, template_name):
+        self.template_name = template_name
+
+    def get(self):
+        self.render(self.template_name)
+
+class LoginHandler(BaseHandler):
+    def get(self):
+        self.render("template/login.html")
+    def validate_credentials(self, userid, password):
+        return userid == self.settings.get("admin_user_id","admin") and password == self.settings.get("admin_password")
+    def post(self):
+        if not self.validate_credentials(self.get_argument("userid"), self.get_argument("password")):
+            return self.render("template/login.html", error="Incorrect userid or password")
+        self.set_secure_cookie("pd_user", self.get_argument("userid"))
+        self.redirect(self.get_argument("next"))
 
 class ExecuteCodeHandler(BaseHandler):
     """
@@ -151,8 +178,9 @@ class PixieAppListHandler(BaseHandler):
 
 class AdminHandler(BaseHandler):
     def fetch_logs(self):
-        with open( PixieGatewayApp.instance().log_path) as f:
-            return "\n".join(deque(f, 100))
+        with open( PixieGatewayApp.instance().log_path) as log_file:
+            return "\n".join(deque(log_file, 100))
+    @tornado.web.authenticated
     def get(self, tab_id):
         tab_definitions = OrderedDict([
             ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",

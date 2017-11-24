@@ -26,7 +26,7 @@ from .notebookMgr import NotebookMgr
 from .handlers import (
     PixieDustHandler, PixieDustLogHandler, ExecuteCodeHandler, PixieAppHandler,
     PixieAppListHandler, PixieAppPublishHandler, ChartShareHandler, StatsHandler,
-    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler
+    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler, LoginHandler
 )
 
 def main():
@@ -55,6 +55,7 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
         return [
             (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
             (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
+            (r'/login', LoginHandler),
             (r"/pixiedustLog", PixieDustLogHandler),
             (r"/pixiedust.js", PixieDustHandler, {'loadjs':True}),
             (r"/pixiedust.css", PixieDustHandler, {'loadjs':False}),
