@@ -26,7 +26,7 @@ from .notebookMgr import NotebookMgr
 from .handlers import (
     PixieDustHandler, PixieDustLogHandler, ExecuteCodeHandler, PixieAppHandler,
     PixieAppListHandler, PixieAppPublishHandler, ChartShareHandler, StatsHandler,
-    AdminHandler, ChartEmbedHandler
+    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler
 )
 
 def main():
@@ -53,7 +53,8 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
         `base_url` traitlet value."""
         pixiedust_home = os.environ.get("PIXIEDUST_HOME", os.path.expanduser('~'))
         return [
-            (r"/static/(.*)", tornado.web.StaticFileHandler, {'path': os.path.join( pixiedust_home, 'static')}),
+            (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
+            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
             (r"/pixiedustLog", PixieDustLogHandler),
             (r"/pixiedust.js", PixieDustHandler, {'loadjs':True}),
             (r"/pixiedust.css", PixieDustHandler, {'loadjs':False}),
@@ -64,7 +65,9 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
             (r"/publish/(?P<name>(?:.*))", PixieAppPublishHandler),
             (r"/chart(?:/(?P<chart_id>(?:.*))?)?", ChartShareHandler),
             (r"/embed(?:/(?P<chart_id>[^/]*)(?:/(?P<width>\d+))?(?:/(?P<height>\d+))?)?", ChartEmbedHandler),
-            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler, {"km":self.parent.kernel_manager})
+            (r"/oembed/chart", OEmbedChartHandler),
+            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler, {"km":self.parent.kernel_manager}),
+            (r"/charts(?:/(?P<page_num>[^/]*)(?:/(?P<page_size>\d+))?)?", ChartsHandler)
         ]
 
     def should_seed_cell(self, code):

@@ -1,0 +1,66 @@
+<script>
+    $( document ).ready(function() {
+        var tbody = $('.pd-gateway-charts tbody')
+        var pageNum = 0
+        var pageSize = 15
+        var totalCount = 0
+
+        function initPagination() {
+            $('#pd-gateway-pagination-prev').click(function() {
+                pageNum--
+                updateCharts()
+            })
+            $('#pd-gateway-pagination-next').click(function() {
+                pageNum++
+                updateCharts()
+            })
+        }
+
+        function updateCharts() {
+            $.get({
+                url: '/charts/' + pageNum + '/' + pageSize,
+                contentType: "application/json",
+                success: function(data) {
+                    var chartsList = data['charts_list']
+                    totalCount = data['total_count']
+
+                    tbody.empty()
+
+                    for (var i in chartsList) {
+                        var c = chartsList[i]
+                        tbody.append(
+                            '<tr>' +
+                            '  <td>' + c['DATE'] + '</td>' +
+                            '  <td>' + c['RENDERERID'] + '</td>' +
+                            '  <td>' + c['AUTHOR'] + '</td>' +
+                            '  <td>' + (c['DESCRIPTION'] || '') + '</td>' +
+                            '  <td>' +
+                            '    <a target="_blank" href="/chart/' + c['CHARTID'] + '" tabindex="0">link</a> | ' +
+                            '    <a data-html="true" data-toggle="popover" title="' + c['CHARTID'] + '" tabindex="0" ' +
+                            '       data-content=\'<object type="text/html" data="/embed/' + c['CHARTID'] + '/300/200" width="300" height="200"></object>\'>preview</a>' +
+                            '  </td>' +
+                            '</tr>'
+                        )
+                    }
+
+                    $('#pd-gateway-pagination-prev').css('display', pageNum > 0 ? 'inline-block' : 'none')
+                    $('#pd-gateway-pagination-next').css('display', totalCount > (pageNum + 1) * pageSize ? 'inline-block' : 'none')
+                    $('.pagination-separator').css('display', (pageNum > 0) && (totalCount > (pageNum + 1) * pageSize) ? 'inline-block' : 'none')
+                    if (chartsList.length > 0) {
+                        $('.pd-gateway-pagination-count').text('Showing ' + ((pageNum * pageSize) + 1) + ' - ' + ((pageNum * pageSize) + chartsList.length) + ' of ' + totalCount)
+                    } else {
+                        $('.pd-gateway-pagination-count').text('No charts available')
+                    }
+
+                    $('[data-toggle=popover]', tbody).popover({
+                        trigger: 'hover focus',
+                        placement: 'left'
+                    })
+                }
+            });
+        }
+
+        updateCharts()
+        initPagination()
+    })
+</script>

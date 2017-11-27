@@ -18,16 +18,18 @@ import json
 import inspect
 import os
 import re
+import base64
 from collections import OrderedDict
 import nbformat
 import tornado
 from tornado import gen, web
 from tornado.log import app_log
 from six import PY3, iteritems
+from six.moves.urllib import parse
 from .session import SessionManager
 from .notebookMgr import NotebookMgr
 from .managedClient import ManagedClientPool
-from .chartsManager import chart_storage
+from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -151,6 +153,7 @@ class AdminHandler(BaseHandler):
         tab_definitions = OrderedDict([
             ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",
                       "args": lambda: {"pixieapp_list":NotebookMgr.instance().notebook_pixieapps()}}),
+            ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts"}),
             ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"})
         ])
         tab_id = tab_id or "apps"
@@ -171,10 +174,11 @@ class PixieAppPublishHandler(BaseHandler):
             raise web.HTTPError(400, u'Publish PixieApp error: {}'.format(exc))
 
 class ChartShareHandler(BaseHandler):
+    @gen.coroutine
     def post(self, chart_id):
         payload = json.loads(self.request.body.decode('utf-8'))
         try:
-            chart_model = chart_storage.store_chart(payload)
+            chart_model = yield gen.maybe_future(SingletonChartStorage.instance().store_chart(payload))
             self.set_status(200)
             self.write(json.dumps(chart_model))
             self.finish()
@@ -182,17 +186,32 @@ class ChartShareHandler(BaseHandler):
             print(traceback.print_exc())
             raise web.HTTPError(400, u'Share Chart error: {}'.format(exc))
 
+    @gen.coroutine
     def get(self, chart_id):
-        chart_model = chart_storage.get_chart(chart_id)
-        if chart_model is not None:
-            self.render("template/showChart.html", chart_model=chart_model)
-        else:
+        chart_model = yield gen.maybe_future(SingletonChartStorage.instance().get_chart(chart_id))
+        if chart_model is None:
             self.set_status(404)
-            self.write("Chart not found")
+            self.write("Chart not found {}".format(chart_id))
+            self.finish()
+
+        fmt = self.get_query_argument("format", "")
+        if fmt == "thumbnail":
+            thumbnail = chart_model.get("THUMBNAIL", None)
+            if thumbnail is None:
+                from .chartThumbnail import Thumbnail
+                thumbnail = yield Thumbnail.instance().get_screenshot_as_png(chart_model)
+            else:
+                thumbnail = base64.b64decode(thumbnail)
+            self.set_header('Content-Type', 'image/png')
+            self.write(thumbnail)
+            self.finish()
+        else:
+            self.render("template/showChart.html", chart_model=chart_model)
 
 class ChartEmbedHandler(BaseHandler):
+    @gen.coroutine
     def get(self, chart_id, width, height):
-        chart_model = chart_storage.get_chart(chart_id)
+        chart_model = yield gen.maybe_future(SingletonChartStorage.instance().get_chart(chart_id))
         if chart_model is not None:
             if 'RENDERERID' in chart_model:
                 content = chart_model['CONTENT']
@@ -217,6 +236,49 @@ class ChartEmbedHandler(BaseHandler):
         else:
             self.set_status(404)
             self.write("Chart not found")
+            self.finish()
+
+class OEmbedChartHandler(BaseHandler):
+    def get(self):
+        url = self.get_query_argument("url")
+        server = self.request.protocol + "://" + self.request.host
+        match = re.match("/chart/(?P<chartid>.*)", parse.urlparse(url).path)
+        if match is None:
+            self.set_status(404)
+            return self.write("Invalid url {}".format(url))
+        chartid = match.group('chartid')
+        width = 600
+        height = 400
+        height_ratio = min(int(self.get_query_argument("maxheight", height)), height)/height
+        width_ratio = min(int(self.get_query_argument("maxwidth", width)), width)/width
+
+        width = int(width * min(height_ratio, width_ratio))
+        height = int(height * min(height_ratio, width_ratio))
+        html = """
+        <object type="text/html" data="{server}/embed/{chartid}/{width}/{height}" width="{width}" height="{height}">
+            <a href="{server}/embed/{chartid}">View Chart</a>' +
+        </object>
+        """.format(server=server, chartid=chartid, width=width, height=height)
+        payload = {
+            "version": "1.0",
+            "type": "rich",
+            "html": html,
+            "width": width,
+            "height": height,
+            "title": "Title",
+            "url": url,
+            "author_name": "username",
+            "provider_name": "PixieGateway",
+            "provider_url": "https://github.com/ibm-watson-data-lab/pixiegateway"
+        }
+        self.write(payload)
+        self.set_header('Content-Type', 'application/json')
+
+class ChartsHandler(BaseHandler):
+    @gen.coroutine
+    def get(self, page_num=0, page_size=10):
+        payload = yield gen.maybe_future(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
+        self.write(payload)
 
 class StatsHandler(BaseHandler):
     """

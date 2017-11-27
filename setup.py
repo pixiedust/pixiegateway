@@ -1,9 +1,9 @@
 from setuptools import setup, find_packages
 setup(name='pixiegateway',
-      version='0.1',
+      version='0.3',
       description='Server for sharing PixieDust chart and running PixieApps',
       url='https://github.com/ibm-watson-data-lab/pixiegateway',
-      install_requires=['pixiedust', 'jupyter_kernel_gateway', 'astunparse'],
+      install_requires=['pixiedust', 'jupyter_kernel_gateway', 'astunparse', 'selenium'],
       author='David Taieb',
       author_email='david_taieb@us.ibm.com',
       license='Apache 2.0',
