@@ -62,7 +62,7 @@ var1 = "var1"
 var2 = "var2"
 from pixiedust.display.app import *
 @PixieApp
-class TestApp:
+class TestApp""" + classdef + """:
     def setup(self):
         self.contents = [var1, var2]
 TestApp().run()
@@ -72,7 +72,7 @@ ns_var1 = 'var1'
 ns_var2 = 'var2'
 from pixiedust.display.app import *
 @PixieApp
-class TestApp():
+class TestApp""" + classdef + """:
     def setup(self):
         self.contents = [ns_var1, ns_var2]
 TestApp().run()
