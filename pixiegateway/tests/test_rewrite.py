@@ -56,6 +56,27 @@ class ns_Test""" + classdef + """:
 ns_a = ns_Test()
 ns_a.foo()
 """
+},{
+    "src":"""
+var1 = "var1"
+var2 = "var2"
+from pixiedust.display.app import *
+@PixieApp
+class TestApp:
+    def setup(self):
+        self.contents = [var1, var2]
+TestApp().run()
+    """,
+    "target":"""
+ns_var1 = 'var1'
+ns_var2 = 'var2'
+from pixiedust.display.app import *
+@PixieApp
+class TestApp():
+    def setup(self):
+        self.contents = [ns_var1, ns_var2]
+TestApp().run()
+    """
 }
 ]
 
