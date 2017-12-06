@@ -14,13 +14,17 @@
 # limitations under the License.
 # -------------------------------------------------------------------------------
 import json
+import base64
 from datetime import datetime
 from time import time
-from six import iteritems
+from six import iteritems, string_types
 from tornado import locks, gen
 from tornado.log import app_log
+from tornado.escape import json_decode, json_encode
 from tornado.concurrent import Future
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from traitlets.config.configurable import SingletonConfigurable
+from traitlets import Dict, default
 from .pixieGatewayApp import PixieGatewayApp
 from .utils import sanitize_traceback
 
@@ -265,15 +269,25 @@ class ManagedClientRunMetrics(dict):
         return ret_value
 
 class ManagedClientPool(SingletonConfigurable):
+    remote_gateway_config = Dict(config=True, help="Remote Gateway configuration in JSON format")
+
+    @default('remote_gateway_config')
+    def remote_gateway_config_default(self):
+        return {}
+
     """
     Orchestrates a Pool of ManagedClients, load-balancing based on user load
     """
     def __init__(self, kernel_manager, **kwargs):
         kwargs['parent'] = PixieGatewayApp.instance()
         super(ManagedClientPool, self).__init__(**kwargs)
-        self.kernel_manager = kernel_manager
+        if self.remote_gateway_config is None or len(self.remote_gateway_config) == 0:
+            self.kernel_manager = LocalKernelManager(kernel_manager)
+        else:
+            self.kernel_manager = RemoteKernelManager(self.remote_gateway_config)
         self.managed_clients = []
-        self.managed_clients.append(ManagedClient(kernel_manager))
+        #start a client
+        #self.get()
 
     def shutdown(self):
         for managed_client in self.managed_clients:
@@ -291,17 +305,81 @@ class ManagedClientPool(SingletonConfigurable):
         kernel_name = None if pixieapp_def is None else pixieapp_def.pref_kernel
         if kernel_name is not None:
             kernel_name = None if kernel_name.strip() == "" else kernel_name.strip()
-        if pixieapp_def is None or kernel_name is None:
+        if (pixieapp_def is None or kernel_name is None) and len(self.managed_clients)>0:
             return self.managed_clients[0]
         #do we already have a ManagedClient for the pref_kernel
-        clients = list(filter(lambda mc: mc.run_stats["kernel_name"]==kernel_name, self.managed_clients))
-        if len(clients)>0:
+        clients = list(filter(lambda mc: mc.run_stats["kernel_name"] == kernel_name, self.managed_clients))
+        if len(clients) > 0:
             return clients[0]
         print("Creating a new Managed client for kernel: {}".format(kernel_name))
-        client = ManagedClient(self.kernel_manager, kernel_name=kernel_name)
+        client = self.kernel_manager.start_kernel(kernel_name=kernel_name)
         self.managed_clients.append(client)
         return client
+
+    @gen.coroutine
+    def list_kernel_specs(self):
+        payload = yield gen.maybe_future(self.kernel_manager.list_kernel_specs())
+        raise gen.Return(payload)
 
     def get_stats(self, kernel_id=None):
         return {mc.kernel_id:mc.get_stats() for mc in self.managed_clients
                 if kernel_id is None or mc.kernel_id == kernel_id}
+
+class LocalKernelManager():
+    def __init__(self, kernel_manager):
+        self.kernel_manager = kernel_manager
+
+    def start_kernel(self, kernel_name):
+        return ManagedClient(self.kernel_manager, kernel_name=kernel_name)
+
+    def list_kernel_specs(self):
+        return self.kernel_manager.kernel_spec_manager.get_all_specs()
+
+class RemoteKernelManager():
+    def __init__(self, config):
+        print("Remote gateway config is: {}".format(config))
+        self.config = config
+        self.http_client = AsyncHTTPClient()
+
+    def start_kernel(self, kernel_name):
+        raise NotImplementedError()
+
+    def to_json(self, payload):
+        if not isinstance(payload, string_types):
+            import codecs
+            payload = codecs.decode(payload, 'utf-8')
+        return json_decode(payload)
+
+    @gen.coroutine
+    def do_get_request(self, path):
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+        if "notebook_gateway" in self.config:
+            url = "{}/{}".format(self.config["notebook_gateway"].strip("/"), path.strip("/"))
+            headers['Authorization'] = 'Basic {}'.format(
+                base64.b64encode('{}:{}'.format(self.config['user'], self.config['password']).encode()).decode()
+            )
+        else:
+            url = "{protocol}://{host}:{port}/{path}?token={token}".format(
+                protocol=self.config.get("protocol"),
+                host=self.config.get("host"),
+                port=self.config.get("port"),
+                path=path.strip("/"),
+                token=self.config.get("auth_token")
+            )
+
+        response = yield self.http_client.fetch(
+            HTTPRequest(url, method='GET', headers=headers)
+        )
+        if response.error is not None:
+            raise response.error
+        raise gen.Return(self.to_json(response.body))
+
+    @gen.coroutine
+    def list_kernel_specs(self):
+        payload = yield self.do_get_request("api/kernelspecs")
+        if "kernelspecs" in payload:
+            payload = payload["kernelspecs"]
+        raise gen.Return(payload)

@@ -313,25 +313,27 @@ class ChartsHandler(BaseHandler):
     def get(self, page_num=0, page_size=10):
         payload = yield gen.maybe_future(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
         self.write(payload)
+        self.finish()
 
 class StatsHandler(BaseHandler):
     """
     Provides various stats about the running kernels
     """
-    def initialize(self, km):
-        self.kernel_manager = km
-
+    @gen.coroutine
     def get(self, command):
         if command is None:
-            stats = ManagedClientPool.instance().get_stats()
+            stats = yield gen.maybe_future( ManagedClientPool.instance().get_stats() )
             for mc_id in stats:
                 stats[mc_id]['users'] = SessionManager.instance().get_users_stats(mc_id)
             self.write(stats)
+            self.finish()
         elif command == "kernels":
-            specs = self.kernel_manager.kernel_spec_manager.get_all_specs()
-            for k, v in iteritems(specs):
-                v['default'] = True if k == ('python3' if PY3 else 'python2') else False
+            specs = yield gen.maybe_future( ManagedClientPool.instance().list_kernel_specs() )
+            specs = {k:v for k,v in iteritems(specs) if v['spec']['language'] == 'python'}
+            for key, value in iteritems(specs):
+                value['default'] = True if key == ('python3' if PY3 else 'python2') else False
             self.write(specs)
+            self.finish()
         else:
             raise web.HTTPError(400, u'Unknown stat command: {}'.format(command))
 

@@ -67,7 +67,7 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
             (r"/chart(?:/(?P<chart_id>(?:.*))?)?", ChartShareHandler),
             (r"/embed(?:/(?P<chart_id>[^/]*)(?:/(?P<width>\d+))?(?:/(?P<height>\d+))?)?", ChartEmbedHandler),
             (r"/oembed/chart", OEmbedChartHandler),
-            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler, {"km":self.parent.kernel_manager}),
+            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler),
             (r"/charts(?:/(?P<page_num>[^/]*)(?:/(?P<page_size>\d+))?)?", ChartsHandler)
         ]
 
