@@ -1,0 +1,62 @@
+{% autoescape None %}
+<link rel="stylesheet" href="/static/codemirror/codemirror.css">
+<script src="/static/codemirror/codemirror.js"></script>
+<script src="/static/codemirror/python/python.js"></script>
+<style type="text/css">
+    .CodeMirror {
+        border-top: 1px solid black; 
+        border-bottom: 1px solid black;
+    }
+</style>
+
+<ul class="nav nav-tabs">
+    <li class="active"><a data-toggle="tab" href="#details">Details for {{app}}</a></li>
+    <li><a data-toggle="tab" href="#warmupCode">Warmup Code</a></li>
+    <li><a data-toggle="tab" href="#runCode">Run Code</a></li>
+</ul>
+      
+<div class="tab-content">
+    <div id="details" class="tab-pane fade in active">
+        <div>App Name: {{manager.app_name}}</div>
+        <div>Kernel Name: {{manager.kernel_name}}</div>
+        <div>Kernel Id: {{manager.kernel_id}}</div>
+        <div>Status: {{manager.status}}</div>
+        {%if manager.exception%}
+        <div>
+            <pre>
+                {{manager.exception}}
+            </pre>
+        </div>
+        {%end%}
+    </div>
+    <div id="warmupCode" class="tab-pane fade">
+        <textarea style="display:none" id="warmupCodeEditor">{{manager.warmup_code}}</textarea>
+        <script type="text/javascript">
+        var editor1 = CodeMirror.fromTextArea(document.getElementById("warmupCodeEditor"), {
+            mode: {name: "python",version: 3,singleLineStringErrors: false},
+            lineNumbers: true,
+            indentUnit: 4,
+            matchBrackets: true,
+            readOnly: true
+        });
+        $('a[data-toggle="tab"][href="#warmupCode"]').on('shown.bs.tab', function (e) {
+            editor1.refresh();
+        });
+        </script>
+    </div>
+    <div id="runCode" class="tab-pane fade">
+        <textarea style="display:none" id="runCodeEditor">{{manager.run_code}}</textarea>
+        <script type="text/javascript">
+            var editor2 = CodeMirror.fromTextArea(document.getElementById("runCodeEditor"), {
+                mode: {name: "python",version: 3,singleLineStringErrors: false},
+                lineNumbers: true,
+                indentUnit: 4,
+                matchBrackets: true,
+                readOnly: true
+            });
+            $('a[data-toggle="tab"][href="#runCode"]').on('shown.bs.tab', function (e) {
+                editor2.refresh();
+            });
+        </script>
+    </div>
+</div>

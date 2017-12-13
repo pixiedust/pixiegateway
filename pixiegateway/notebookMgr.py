@@ -31,7 +31,8 @@ def ast_parse(code):
     try:
         #Do we even need to sanitize
         return ast.parse(code)
-    except SyntaxError:
+    except SyntaxError as exc:
+        print("Got an error parsing the code: {} - {}".format(code, exc))
         pass
 
     def translateMagicLine(line):
@@ -41,7 +42,7 @@ def ast_parse(code):
                 ast.parse(line)
             except SyntaxError:
                 magic_line = line[index+1:].split()
-                line= """{} get_ipython().run_line_magic("{}", "{}")""".format(
+                line = """{} get_ipython().run_line_magic("{}", "{}")""".format(
                     line[:index], magic_line[0], ' '.join(magic_line[1:])
                     ).strip()
         return line
@@ -121,13 +122,6 @@ class NotebookMgr(SingletonConfigurable):
             PixieApp definition object
         """
         return self.pixieapps.get(pixieAppName, None)
-
-    def _importByName(self, name):
-        components = name.split('.')
-        mod = __import__(components[0])
-        for comp in components[1:]:
-            mod = getattr(mod, comp)
-        return mod
 
     def _readNotebooks(self):
         app_log.debug("Reading notebooks from notebook_dir %s", self.notebook_dir)

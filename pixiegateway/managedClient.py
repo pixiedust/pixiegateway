@@ -1,12 +1,12 @@
 # -------------------------------------------------------------------------------
 # Copyright IBM Corp. 2017
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an 'AS IS' BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,17 +14,15 @@
 # limitations under the License.
 # -------------------------------------------------------------------------------
 import json
-import base64
 from datetime import datetime
 from time import time
-from six import iteritems, string_types
+from six import iteritems
 from tornado import locks, gen
 from tornado.log import app_log
-from tornado.escape import json_decode, json_encode
 from tornado.concurrent import Future
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from traitlets.config.configurable import SingletonConfigurable
 from traitlets import Dict, default
+from .kernel import LocalKernelManager, RemoteKernelManager
 from .pixieGatewayApp import PixieGatewayApp
 from .utils import sanitize_traceback
 
@@ -65,32 +63,19 @@ class ManagedClient(object):
             "app_stats": self.app_stats.external_repr()
         }
 
+    @gen.coroutine
     def start(self, kernel_name=None):
         self.app_stats = ManagedClientAppMetrics()
         self.run_stats = ManagedClientRunMetrics()
-        self.kernel_id = self.kernel_manager.start_kernel(kernel_name=kernel_name).result()
-        kernel = self.kernel_manager.get_kernel(self.kernel_id)
-
-        self.kernel_client = kernel.client()
-        self.kernel_client.session = type(self.kernel_client.session)(
-            config=kernel.session.config,
-            key=kernel.session.key
-        )
-        self.iopub = self.kernel_manager.connect_iopub(self.kernel_id)
-        self.iopub.on_recv(self.iopub_handler)
-
-        # Start channels and wait for ready
-        self.kernel_client.start_channels()
-        self.kernel_client.wait_for_ready()
+        self.kernel_handle = yield gen.maybe_future(self.kernel_manager.start_kernel(
+            kernel_name=kernel_name,
+            iopub_handler=self.iopub_handler
+        ))
 
         #start the stats
-        self.run_stats.start(kernel)
-
-        print("kernel client initialized")
-
-        self.session = type(self.kernel_client.session)(
-            config=self.kernel_client.session.config,
-            key=self.kernel_client.session.key,
+        self.run_stats.start(
+            self.kernel_manager.get_kernel_name(self.kernel_handle), 
+            self.kernel_manager.get_kernel_spec(self.kernel_handle)
         )
 
         self.lock = locks.Lock()
@@ -123,19 +108,21 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
                     pass
             app_log.debug("Installed modules %s", self.installed_modules)
         future.add_done_callback(done)
+        raise gen.Return(future)
 
-    def iopub_handler(self, msgList):
-        _, msgList = self.session.feed_identities(msgList)
-        msg = self.session.deserialize(msgList)
+    def iopub_handler(self, msg):
         if msg['header']['msg_type'] == 'status':
             self.run_stats.update_status(msg['content']['execution_state'])
 
         if self.current_iopub_handler:
             self.current_iopub_handler(msg)
 
+    @property
+    def kernel_id(self):
+        return self.kernel_manager.get_kernel_id(self.kernel_handle)
+
     def shutdown(self):
-        self.kernel_client.stop_channels()
-        self.kernel_manager.shutdown_kernel(self.kernel_id, now=True)
+        self.kernel_manager.shutdown(self.kernel_handle)
 
     @gen.coroutine
     def install_dependencies(self, pixieapp_def, log_messages):
@@ -196,12 +183,13 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
         Future
         
         """
+        app_log.debug("executing code: {}".format(code))
         if result_extractor is None:
             result_extractor = self._result_extractor
         code = PixieGatewayApp.instance().prepend_execute_code + "\n" + code
         app_log.debug("Executing Code: %s", code)
         future = Future()
-        parent_header = self.kernel_client.execute(code)
+        parent_header = self.kernel_manager.execute(self.kernel_handle, code)
         result_accumulator = []
         def on_reply(msg):
             if 'msg_id' in msg['parent_header'] and msg['parent_header']['msg_id'] == parent_header:
@@ -211,13 +199,17 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
                     result_accumulator.append(msg)
                     # Complete the future on idle status
                     if msg['header']['msg_type'] == 'status' and msg['content']['execution_state'] == 'idle':
-                        future.set_result(result_extractor( result_accumulator ))
+                        future.set_result(result_extractor(result_accumulator))
                     elif msg['header']['msg_type'] == 'error':
                         error_name = msg['content']['ename']
                         error_value = msg['content']['evalue']
                         trace = sanitize_traceback(msg['content']['traceback'])
-                        future.set_exception( 
-                            Exception( 'Code execution Error {}: {} \nTraceback: {}\nRunning code: {}'.format(error_name, error_value, trace, code) ) 
+                        future.set_exception(
+                            Exception(
+                                'Code execution Error {}: {} \nTraceback: {}\nRunning code: {}'.format(
+                                    error_name, error_value, trace, code
+                                )
+                            )
                         )
             else:
                 app_log.warning("Got an orphan message %s", msg['parent_header'])
@@ -233,7 +225,12 @@ class ManagedClientAppMetrics(dict):
         super(ManagedClientAppMetrics, self).__init__(args)
 
     def external_repr(self):
-        return [key for key in self]
+        return [
+            {
+                "appName":key,
+                "status":"error" if value.get("warmup_exception") is not None else "running"
+            } for key, value in iteritems(self)
+        ]
 
 class ManagedClientRunMetrics(dict):
     def __init__(self, *args):
@@ -243,10 +240,10 @@ class ManagedClientRunMetrics(dict):
     def kernel_spec(self):
         return self["kernel_spec"] if "kernel_spec" in self else None
 
-    def start(self, kernel):
+    def start(self, kernel_name, kernel_spec):
         self["status"] = "idle"
-        self["kernel_name"] = kernel.kernel_name
-        self["kernel_spec"] = kernel.kernel_spec.to_dict()
+        self["kernel_name"] = kernel_name
+        self["kernel_spec"] = kernel_spec
         self.time_checkpoint = time()
         self.time_idle = 0
         self.time_busy = 0
@@ -312,9 +309,14 @@ class ManagedClientPool(SingletonConfigurable):
         if len(clients) > 0:
             return clients[0]
         print("Creating a new Managed client for kernel: {}".format(kernel_name))
-        client = self.kernel_manager.start_kernel(kernel_name=kernel_name)
+        # client = self.kernel_manager.start_kernel(kernel_name=kernel_name)
+        client = ManagedClient( self.kernel_manager, kernel_name)
         self.managed_clients.append(client)
         return client
+
+    def get_by_kernel_id(self, kernel_id):
+        clients = list(filter(lambda mc: mc.kernel_id == kernel_id, self.managed_clients))
+        return None if len(clients) == 0 else clients[0]
 
     @gen.coroutine
     def list_kernel_specs(self):
@@ -324,62 +326,3 @@ class ManagedClientPool(SingletonConfigurable):
     def get_stats(self, kernel_id=None):
         return {mc.kernel_id:mc.get_stats() for mc in self.managed_clients
                 if kernel_id is None or mc.kernel_id == kernel_id}
-
-class LocalKernelManager():
-    def __init__(self, kernel_manager):
-        self.kernel_manager = kernel_manager
-
-    def start_kernel(self, kernel_name):
-        return ManagedClient(self.kernel_manager, kernel_name=kernel_name)
-
-    def list_kernel_specs(self):
-        return self.kernel_manager.kernel_spec_manager.get_all_specs()
-
-class RemoteKernelManager():
-    def __init__(self, config):
-        print("Remote gateway config is: {}".format(config))
-        self.config = config
-        self.http_client = AsyncHTTPClient()
-
-    def start_kernel(self, kernel_name):
-        raise NotImplementedError()
-
-    def to_json(self, payload):
-        if not isinstance(payload, string_types):
-            import codecs
-            payload = codecs.decode(payload, 'utf-8')
-        return json_decode(payload)
-
-    @gen.coroutine
-    def do_get_request(self, path):
-        headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        }
-        if "notebook_gateway" in self.config:
-            url = "{}/{}".format(self.config["notebook_gateway"].strip("/"), path.strip("/"))
-            headers['Authorization'] = 'Basic {}'.format(
-                base64.b64encode('{}:{}'.format(self.config['user'], self.config['password']).encode()).decode()
-            )
-        else:
-            url = "{protocol}://{host}:{port}/{path}?token={token}".format(
-                protocol=self.config.get("protocol"),
-                host=self.config.get("host"),
-                port=self.config.get("port"),
-                path=path.strip("/"),
-                token=self.config.get("auth_token")
-            )
-
-        response = yield self.http_client.fetch(
-            HTTPRequest(url, method='GET', headers=headers)
-        )
-        if response.error is not None:
-            raise response.error
-        raise gen.Return(self.to_json(response.body))
-
-    @gen.coroutine
-    def list_kernel_specs(self):
-        payload = yield self.do_get_request("api/kernelspecs")
-        if "kernelspecs" in payload:
-            payload = payload["kernelspecs"]
-        raise gen.Return(payload)

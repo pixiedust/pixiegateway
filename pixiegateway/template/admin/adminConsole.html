@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     {%include "adminCSS.html"%}
-    {%include "headLinks.html"%}
+    {%include "../headLinks.html"%}
 </head>
 <body>
     <nav class="navbar navbar-pd-gateway navbar-fixed-top">
@@ -23,27 +23,24 @@
         <div class="col-xs-12 col-sm-2 adminOptions">
             <ul class="nav nav-pills nav-stacked">
                 {%for key, tab in iteritems(tab_definitions)%}
+                {% set name = tab.get('name', None) or tab.get('default')['name'] %}
                 <li {%if key==selected_tab_id%} class="active" {%end%}>
-                    <a data-toggle="collapse" data-target="#contents" href="/admin/{{key}}">{{tab['name']}}</a>
+                    <a data-toggle="collapse" data-target="#contents" href="/admin/{{key}}">{{name}}</a>
                 </li>
                 {%end%}
             </ul>
         </div>
         <div class="col-xs-12 col-sm-10 adminContents">
             <div class="admin-content-title">
-                {%for key, tab in iteritems(tab_definitions)%}
-                    {%if key==selected_tab_id%}
-                        <span>{{tab['description']}}</span>
-                    {%end%}
-                {%end%}
+                <span>{{content_definition.get('description', "")}}</span>
             </div>
 
             <div class="admin-content-main">
-                {%include "logo.html"%}
+                {%include "../logo.html"%}
 
                 <div id="contents">
-                    {% set path = tab_definitions[selected_tab_id]['path'] %}
-                    {% set args = tab_definitions[selected_tab_id]['args']() if 'args' in tab_definitions[selected_tab_id] else {} %}
+                    {% set path = content_definition['path'] %}
+                    {% set args = content_definition['args']() if 'args' in content_definition else {} %}
                     {% module Template("template/" + path, **args) %}
                 </div>
             </div>
