@@ -15,7 +15,14 @@ before_install:
 install:
 - conda create -y -q -n pixiegateway-travis-test python=$TRAVIS_PYTHON_VERSION
 - source activate pixiegateway-travis-test
-- conda install -y jupyter matplotlib pandas=0.19.2 seaborn bokeh==0.12.6 requests pyyaml nose
+- pip install jupyter 
+- pip install matplotlib 
+- pip install pandas 
+- pip install seaborn 
+- pip install bokeh
+- pip install requests 
+- pip install pyyaml 
+- pip install nose
 - pip install pandas_datareader
 - cd $TRAVIS_BUILD_DIR
 - python setup.py install
