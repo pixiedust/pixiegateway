@@ -25,6 +25,7 @@ from traitlets import Dict, default
 from .kernel import LocalKernelManager, RemoteKernelManager
 from .pixieGatewayApp import PixieGatewayApp
 from .utils import sanitize_traceback
+from .exceptions import CodeExecutionError
 
 class ManagedClient(object):
     """
@@ -205,11 +206,7 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
                         error_value = msg['content']['evalue']
                         trace = sanitize_traceback(msg['content']['traceback'])
                         future.set_exception(
-                            Exception(
-                                'Code execution Error {}: {} \nTraceback: {}\nRunning code: {}'.format(
-                                    error_name, error_value, trace, code
-                                )
-                            )
+                            CodeExecutionError(error_name, error_value, trace, code)
                         )
             else:
                 app_log.warning("Got an orphan message %s", msg['parent_header'])

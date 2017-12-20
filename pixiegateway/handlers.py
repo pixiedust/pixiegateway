@@ -21,6 +21,7 @@ import inspect
 import os
 import re
 import base64
+from uuid import uuid4
 from collections import OrderedDict, deque
 import nbformat
 import tornado
@@ -35,6 +36,7 @@ from .managedClient import ManagedClientPool
 from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
 from .pixieGatewayApp import PixieGatewayApp
+from .exceptions import CodeExecutionError
 
 class BaseHandler(tornado.web.RequestHandler):
     """Base class for all PixieGateway handler"""
@@ -42,10 +44,30 @@ class BaseHandler(tornado.web.RequestHandler):
         pass
 
     def _handle_request_exception(self, exc):
-        self.write("<div>Unexpected error:</div>")
-        self.write("<pre>")
-        traceback.print_exc(file=self)
-        self.write("</pre>")
+        msg = {
+            "buffers": [],
+            "channel": "iopub",
+            "content": {
+                "data": {
+                    "text/html": "<div>Unexpected error:</div><pre>{}</pre>".format(
+                        str(exc) if isinstance(exc, CodeExecutionError) else traceback.format_exc()
+                        )
+                },
+                "metadata": {},
+                "transient": {}
+            },
+            "header": {
+                "username": "pixiegateway",
+                "msg_type": "display_data",
+                "msg_id": uuid4().hex,
+                "version": "5.2"
+            },
+            "metadata": {},
+            "msg_id": "",
+            "msg_type":"display_data",
+            "parent_header": {}
+        }
+        self.write(json.dumps([msg]))
         self.finish()
 
     def get_template_path(self):
@@ -100,10 +122,9 @@ Implement generic kernel code execution routine
             try:
                 response = yield managed_client.execute_code(self.request.body.decode('utf-8'))
                 self.write(response)
-            except:
-                traceback.print_exc()
-            finally:
                 self.finish()
+            except Exception as exc:
+                self._handle_request_exception(exc)
 
 class PixieAppHandler(BaseHandler):
     """
@@ -140,7 +161,7 @@ clazz = "{clazz}"
 
         with (yield managed_client.lock.acquire()):
             response = yield managed_client.execute_code(code, self.result_extractor)
-            self.render("template/main.html", response = response, title=pixieapp_def.title if pixieapp_def is not None else None)
+            self.render("template/main.html", response=response, title=pixieapp_def.title if pixieapp_def is not None else None)
 
     def result_extractor(self, result_accumulator):
         res = []
