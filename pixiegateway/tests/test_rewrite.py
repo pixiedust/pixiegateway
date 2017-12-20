@@ -42,6 +42,19 @@ for v in someList:
         ns_var1 = bar(ns_var1)
 """
 },{
+    "src": """
+!pip install something
+%autoreload 2
+var1 = foo()
+var2 = "some string with percent % in the middle"
+""",
+    "target": """
+get_ipython().system('pip install something')
+get_ipython().magic('autoreload 2')
+ns_var1 = foo()
+ns_var2 = 'some string with percent % in the middle'
+"""
+},{
     "src":"""
 class Test""" + classdef + """:
     def foo(self):

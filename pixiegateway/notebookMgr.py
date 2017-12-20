@@ -26,27 +26,16 @@ from tornado.log import app_log
 from tornado.util import import_object
 from .pixieGatewayApp import PixieGatewayApp
 from .managedClient import ManagedClientPool
+from IPython.core.getipython import get_ipython
 
 def ast_parse(code):
     try:
-        #Do we even need to sanitize
         return ast.parse(code)
-    except SyntaxError as exc:
-        print("Got an error parsing the code: {} - {}".format(code, exc))
-        pass
-
-    def translateMagicLine(line):
-        index = line.find('%')
-        if index >= 0:
-            try:
-                ast.parse(line)
-            except SyntaxError:
-                magic_line = line[index+1:].split()
-                line = """{} get_ipython().run_line_magic("{}", "{}")""".format(
-                    line[:index], magic_line[0], ' '.join(magic_line[1:])
-                    ).strip()
-        return line
-    return ast.parse('\n'.join([translateMagicLine(p) for p in code.split('\n') if not p.strip().startswith('!')]))
+    except SyntaxError:
+        #transform the code first to handle notebook syntactic sugar like magic and system
+        return ast.parse(
+            get_ipython().input_transformer_manager.transform_cell(code)
+        )
 
 class NotebookFileLoader():
     def load(self, path):
