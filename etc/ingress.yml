@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: pixiegateway-ingress
+spec:
+  tls:
+  - hosts:
+    - <your cluster name>.us-south.containers.mybluemix.net
+    secretName: <your cluster name>
+  rules:
+  - host: <your cluster name>.us-south.containers.mybluemix.net
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: pixiegateway-service
+          servicePort: 8888

@@ -5,8 +5,8 @@ python:
 before_install:
 - echo Installing Anaconda. Path is $PATH
 - cd
-- if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then wget https://repo.continuum.io/archive/Anaconda2-4.2.0-Linux-x86_64.sh
-  -O anaconda.sh; else wget https://repo.continuum.io/archive/Anaconda3-4.2.0-Linux-x86_64.sh
+- if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then wget https://repo.continuum.io/archive/Anaconda2-5.0.1-Linux-x86_64.sh
+  -O anaconda.sh; else wget https://repo.continuum.io/archive/Anaconda3-5.0.1-Linux-x86_64.sh
   -O anaconda.sh; fi
 - bash anaconda.sh -b -p $HOME/anaconda
 - export PATH="$HOME/anaconda/bin:$PATH"
@@ -15,7 +15,14 @@ before_install:
 install:
 - conda create -y -q -n pixiegateway-travis-test python=$TRAVIS_PYTHON_VERSION
 - source activate pixiegateway-travis-test
-- conda install -y jupyter matplotlib pandas=0.19.2 seaborn bokeh==0.12.6 requests pyyaml nose
+- pip install jupyter 
+- pip install matplotlib 
+- pip install pandas 
+- pip install seaborn 
+- pip install bokeh
+- pip install requests 
+- pip install pyyaml 
+- pip install nose
 - pip install pandas_datareader
 - cd $TRAVIS_BUILD_DIR
 - python setup.py install

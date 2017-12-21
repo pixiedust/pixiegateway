@@ -1,12 +1,12 @@
 # -------------------------------------------------------------------------------
 # Copyright IBM Corp. 2017
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an 'AS IS' BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,8 +21,11 @@ from tornado import locks, gen
 from tornado.log import app_log
 from tornado.concurrent import Future
 from traitlets.config.configurable import SingletonConfigurable
+from traitlets import Dict, default
+from .kernel import LocalKernelManager, RemoteKernelManager
 from .pixieGatewayApp import PixieGatewayApp
 from .utils import sanitize_traceback
+from .exceptions import CodeExecutionError
 
 class ManagedClient(object):
     """
@@ -61,32 +64,19 @@ class ManagedClient(object):
             "app_stats": self.app_stats.external_repr()
         }
 
+    @gen.coroutine
     def start(self, kernel_name=None):
         self.app_stats = ManagedClientAppMetrics()
         self.run_stats = ManagedClientRunMetrics()
-        self.kernel_id = self.kernel_manager.start_kernel(kernel_name=kernel_name).result()
-        kernel = self.kernel_manager.get_kernel(self.kernel_id)
-
-        self.kernel_client = kernel.client()
-        self.kernel_client.session = type(self.kernel_client.session)(
-            config=kernel.session.config,
-            key=kernel.session.key
-        )
-        self.iopub = self.kernel_manager.connect_iopub(self.kernel_id)
-        self.iopub.on_recv(self.iopub_handler)
-
-        # Start channels and wait for ready
-        self.kernel_client.start_channels()
-        self.kernel_client.wait_for_ready()
+        self.kernel_handle = yield gen.maybe_future(self.kernel_manager.start_kernel(
+            kernel_name=kernel_name,
+            iopub_handler=self.iopub_handler
+        ))
 
         #start the stats
-        self.run_stats.start(kernel)
-
-        print("kernel client initialized")
-
-        self.session = type(self.kernel_client.session)(
-            config=self.kernel_client.session.config,
-            key=self.kernel_client.session.key,
+        self.run_stats.start(
+            self.kernel_manager.get_kernel_name(self.kernel_handle), 
+            self.kernel_manager.get_kernel_spec(self.kernel_handle)
         )
 
         self.lock = locks.Lock()
@@ -119,19 +109,21 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
                     pass
             app_log.debug("Installed modules %s", self.installed_modules)
         future.add_done_callback(done)
+        raise gen.Return(future)
 
-    def iopub_handler(self, msgList):
-        _, msgList = self.session.feed_identities(msgList)
-        msg = self.session.deserialize(msgList)
+    def iopub_handler(self, msg):
         if msg['header']['msg_type'] == 'status':
             self.run_stats.update_status(msg['content']['execution_state'])
 
         if self.current_iopub_handler:
             self.current_iopub_handler(msg)
 
+    @property
+    def kernel_id(self):
+        return self.kernel_manager.get_kernel_id(self.kernel_handle)
+
     def shutdown(self):
-        self.kernel_client.stop_channels()
-        self.kernel_manager.shutdown_kernel(self.kernel_id, now=True)
+        self.kernel_manager.shutdown(self.kernel_handle)
 
     @gen.coroutine
     def install_dependencies(self, pixieapp_def, log_messages):
@@ -192,12 +184,13 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
         Future
         
         """
+        app_log.debug("executing code: {}".format(code))
         if result_extractor is None:
             result_extractor = self._result_extractor
         code = PixieGatewayApp.instance().prepend_execute_code + "\n" + code
         app_log.debug("Executing Code: %s", code)
         future = Future()
-        parent_header = self.kernel_client.execute(code)
+        parent_header = self.kernel_manager.execute(self.kernel_handle, code)
         result_accumulator = []
         def on_reply(msg):
             if 'msg_id' in msg['parent_header'] and msg['parent_header']['msg_id'] == parent_header:
@@ -207,13 +200,13 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
                     result_accumulator.append(msg)
                     # Complete the future on idle status
                     if msg['header']['msg_type'] == 'status' and msg['content']['execution_state'] == 'idle':
-                        future.set_result(result_extractor( result_accumulator ))
+                        future.set_result(result_extractor(result_accumulator))
                     elif msg['header']['msg_type'] == 'error':
                         error_name = msg['content']['ename']
                         error_value = msg['content']['evalue']
                         trace = sanitize_traceback(msg['content']['traceback'])
-                        future.set_exception( 
-                            Exception( 'Code execution Error {}: {} \nTraceback: {}\nRunning code: {}'.format(error_name, error_value, trace, code) ) 
+                        future.set_exception(
+                            CodeExecutionError(error_name, error_value, trace, code)
                         )
             else:
                 app_log.warning("Got an orphan message %s", msg['parent_header'])
@@ -229,7 +222,12 @@ class ManagedClientAppMetrics(dict):
         super(ManagedClientAppMetrics, self).__init__(args)
 
     def external_repr(self):
-        return [key for key in self]
+        return [
+            {
+                "appName":key,
+                "status":"error" if value.get("warmup_exception") is not None else "running"
+            } for key, value in iteritems(self)
+        ]
 
 class ManagedClientRunMetrics(dict):
     def __init__(self, *args):
@@ -239,10 +237,10 @@ class ManagedClientRunMetrics(dict):
     def kernel_spec(self):
         return self["kernel_spec"] if "kernel_spec" in self else None
 
-    def start(self, kernel):
+    def start(self, kernel_name, kernel_spec):
         self["status"] = "idle"
-        self["kernel_name"] = kernel.kernel_name
-        self["kernel_spec"] = kernel.kernel_spec.to_dict()
+        self["kernel_name"] = kernel_name
+        self["kernel_spec"] = kernel_spec
         self.time_checkpoint = time()
         self.time_idle = 0
         self.time_busy = 0
@@ -265,15 +263,25 @@ class ManagedClientRunMetrics(dict):
         return ret_value
 
 class ManagedClientPool(SingletonConfigurable):
+    remote_gateway_config = Dict(config=True, help="Remote Gateway configuration in JSON format")
+
+    @default('remote_gateway_config')
+    def remote_gateway_config_default(self):
+        return {}
+
     """
     Orchestrates a Pool of ManagedClients, load-balancing based on user load
     """
     def __init__(self, kernel_manager, **kwargs):
         kwargs['parent'] = PixieGatewayApp.instance()
         super(ManagedClientPool, self).__init__(**kwargs)
-        self.kernel_manager = kernel_manager
+        if self.remote_gateway_config is None or len(self.remote_gateway_config) == 0:
+            self.kernel_manager = LocalKernelManager(kernel_manager)
+        else:
+            self.kernel_manager = RemoteKernelManager(self.remote_gateway_config)
         self.managed_clients = []
-        self.managed_clients.append(ManagedClient(kernel_manager))
+        #start a client
+        #self.get()
 
     def shutdown(self):
         for managed_client in self.managed_clients:
@@ -291,16 +299,26 @@ class ManagedClientPool(SingletonConfigurable):
         kernel_name = None if pixieapp_def is None else pixieapp_def.pref_kernel
         if kernel_name is not None:
             kernel_name = None if kernel_name.strip() == "" else kernel_name.strip()
-        if pixieapp_def is None or kernel_name is None:
+        if (pixieapp_def is None or kernel_name is None) and len(self.managed_clients)>0:
             return self.managed_clients[0]
         #do we already have a ManagedClient for the pref_kernel
-        clients = list(filter(lambda mc: mc.run_stats["kernel_name"]==kernel_name, self.managed_clients))
-        if len(clients)>0:
+        clients = list(filter(lambda mc: mc.run_stats["kernel_name"] == kernel_name, self.managed_clients))
+        if len(clients) > 0:
             return clients[0]
         print("Creating a new Managed client for kernel: {}".format(kernel_name))
-        client = ManagedClient(self.kernel_manager, kernel_name=kernel_name)
+        # client = self.kernel_manager.start_kernel(kernel_name=kernel_name)
+        client = ManagedClient( self.kernel_manager, kernel_name)
         self.managed_clients.append(client)
         return client
+
+    def get_by_kernel_id(self, kernel_id):
+        clients = list(filter(lambda mc: mc.kernel_id == kernel_id, self.managed_clients))
+        return None if len(clients) == 0 else clients[0]
+
+    @gen.coroutine
+    def list_kernel_specs(self):
+        payload = yield gen.maybe_future(self.kernel_manager.list_kernel_specs())
+        raise gen.Return(payload)
 
     def get_stats(self, kernel_id=None):
         return {mc.kernel_id:mc.get_stats() for mc in self.managed_clients

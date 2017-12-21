@@ -26,7 +26,7 @@ from .notebookMgr import NotebookMgr
 from .handlers import (
     PixieDustHandler, PixieDustLogHandler, ExecuteCodeHandler, PixieAppHandler,
     PixieAppListHandler, PixieAppPublishHandler, ChartShareHandler, StatsHandler,
-    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler
+    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler, LoginHandler
 )
 
 def main():
@@ -51,10 +51,10 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
         name, and handler arguments, that should be registered in the kernel gateway's
         web application. Paths are used as given and should respect the kernel gateway's
         `base_url` traitlet value."""
-        pixiedust_home = os.environ.get("PIXIEDUST_HOME", os.path.expanduser('~'))
         return [
-            (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
-            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
+            (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
+            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
+            (r'/login', LoginHandler),
             (r"/pixiedustLog", PixieDustLogHandler),
             (r"/pixiedust.js", PixieDustHandler, {'loadjs':True}),
             (r"/pixiedust.css", PixieDustHandler, {'loadjs':False}),
@@ -66,7 +66,7 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
             (r"/chart(?:/(?P<chart_id>(?:.*))?)?", ChartShareHandler),
             (r"/embed(?:/(?P<chart_id>[^/]*)(?:/(?P<width>\d+))?(?:/(?P<height>\d+))?)?", ChartEmbedHandler),
             (r"/oembed/chart", OEmbedChartHandler),
-            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler, {"km":self.parent.kernel_manager}),
+            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler),
             (r"/charts(?:/(?P<page_num>[^/]*)(?:/(?P<page_size>\d+))?)?", ChartsHandler)
         ]
 
