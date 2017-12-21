@@ -49,8 +49,8 @@ var1 = foo()
 var2 = "some string with percent % in the middle"
 """,
     "target": """
-get_ipython().system('pip install something')
-get_ipython().magic('autoreload 2')
+get_ipython().system(u'pip install something')
+get_ipython().magic(u'autoreload 2')
 ns_var1 = foo()
 ns_var2 = 'some string with percent % in the middle'
 """
