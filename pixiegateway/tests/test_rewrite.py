@@ -18,6 +18,12 @@ from pixiegateway.notebookMgr import ast_parse, get_symbol_table, RewriteGlobals
 import astunparse
 from nose.tools import assert_equals
 import six
+import pkg_resources
+
+ipython_version = pkg_resources.get_distribution("ipython").parsed_version._version.release
+
+def either(cond, stat1, stat2):
+    return stat1 if cond is True else stat2
 
 classdef = ''
 uni = 'u'
@@ -50,13 +56,15 @@ for v in someList:
 var1 = foo()
 var2 = "some string with percent % in the middle"
 """,
-    "target": """
+    "target": either(ipython_version > (6, 2, 0), """
 get_ipython().system(""" + uni + """'pip install something')
-get_ipython().run_line_magic(""" + uni + """'autoreload', '2')
+get_ipython().run_line_magic(""" + uni + """'autoreload', '2')""", """
+get_ipython().system(""" + uni + """'pip install something')
+get_ipython().magic(""" + uni + """'autoreload 2')""") + """
 ns_var1 = foo()
 ns_var2 = 'some string with percent % in the middle'
 """
-},{
+}, {
     "src":"""
 class Test""" + classdef + """:
     def foo(self):
@@ -103,6 +111,6 @@ def compare_multiline(src, target):
 
 def test_rewrite():
     for code in code_map:
-        symbols = get_symbol_table(ast_parse( code['src'] ) )
+        symbols = get_symbol_table(ast_parse( code['src'].strip() ) )
         rewrite_code = astunparse.unparse( RewriteGlobals(symbols, "ns_").visit(ast_parse(code['src'])) )
-        compare_multiline(code["target"],rewrite_code.split('\n'))
+        compare_multiline(code["target"].strip(), [l for l in rewrite_code.split('\n') if l.strip() != ""])
