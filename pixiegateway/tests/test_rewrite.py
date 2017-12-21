@@ -20,8 +20,10 @@ from nose.tools import assert_equals
 import six
 
 classdef = ''
+uni = 'u'
 if six.PY3:
     classdef = '()'
+    uni = ''
 
 code_map = [
 {
@@ -49,8 +51,8 @@ var1 = foo()
 var2 = "some string with percent % in the middle"
 """,
     "target": """
-get_ipython().system(u'pip install something')
-get_ipython().magic(u'autoreload 2')
+get_ipython().system(""" + uni + """'pip install something')
+get_ipython().run_line_magic(""" + uni + """'autoreload', '2')
 ns_var1 = foo()
 ns_var2 = 'some string with percent % in the middle'
 """
