@@ -51,10 +51,9 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
         name, and handler arguments, that should be registered in the kernel gateway's
         web application. Paths are used as given and should respect the kernel gateway's
         `base_url` traitlet value."""
-        pixiedust_home = os.environ.get("PIXIEDUST_HOME", os.path.expanduser('~'))
         return [
-            (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
-            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "pixiegateway/static"}),
+            (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
+            (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
             (r'/login', LoginHandler),
             (r"/pixiedustLog", PixieDustLogHandler),
             (r"/pixiedust.js", PixieDustHandler, {'loadjs':True}),
