@@ -13,17 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -------------------------------------------------------------------------------
+# pylint: disable=W0223
+
 import traceback
 import json
 import inspect
 import os
 import re
 import base64
-from collections import OrderedDict
+from uuid import uuid4
+from collections import OrderedDict, deque
 import nbformat
 import tornado
 from tornado import gen, web
 from tornado.log import app_log
+from tornado.util import import_object
 from six import PY3, iteritems
 from six.moves.urllib import parse
 from .session import SessionManager
@@ -31,16 +35,39 @@ from .notebookMgr import NotebookMgr
 from .managedClient import ManagedClientPool
 from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
+from .pixieGatewayApp import PixieGatewayApp
+from .exceptions import CodeExecutionError
 
 class BaseHandler(tornado.web.RequestHandler):
+    """Base class for all PixieGateway handler"""
     def initialize(self):
         pass
 
     def _handle_request_exception(self, exc):
-        self.write("<div>Unexpected error:</div>")
-        self.write("<pre>")
-        traceback.print_exc(file=self)
-        self.write("</pre>")
+        msg = {
+            "buffers": [],
+            "channel": "iopub",
+            "content": {
+                "data": {
+                    "text/html": "<div>Unexpected error:</div><pre>{}</pre>".format(
+                        str(exc) if isinstance(exc, CodeExecutionError) else traceback.format_exc()
+                        )
+                },
+                "metadata": {},
+                "transient": {}
+            },
+            "header": {
+                "username": "pixiegateway",
+                "msg_type": "display_data",
+                "msg_id": uuid4().hex,
+                "version": "5.2"
+            },
+            "metadata": {},
+            "msg_id": "",
+            "msg_type":"display_data",
+            "parent_header": {}
+        }
+        self.write(json.dumps([msg]))
         self.finish()
 
     def get_template_path(self):
@@ -53,10 +80,34 @@ class BaseHandler(tornado.web.RequestHandler):
         self.session = SessionManager.instance().get_session(self)
         app_log.debug("session %s", self.session)
 
+    def get_current_user(self):
+        return self.get_secure_cookie("pd_user")
+
     def set_default_headers(self):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Headers", "x-requested-with")
         self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+
+class TemplateDispatcherHandler(BaseHandler):
+    """
+    Generic handler that renders through a template
+    """
+    def initialize(self, template_name):
+        self.template_name = template_name
+
+    def get(self):
+        self.render(self.template_name)
+
+class LoginHandler(BaseHandler):
+    def get(self):
+        self.render("template/login.html")
+    def validate_credentials(self, userid, password):
+        return userid == self.settings.get("admin_user_id","admin") and password == self.settings.get("admin_password")
+    def post(self):
+        if not self.validate_credentials(self.get_argument("userid"), self.get_argument("password")):
+            return self.render("template/login.html", error="Incorrect userid or password")
+        self.set_secure_cookie("pd_user", self.get_argument("userid"))
+        self.redirect(self.get_argument("next"))
 
 class ExecuteCodeHandler(BaseHandler):
     """
@@ -71,10 +122,9 @@ Implement generic kernel code execution routine
             try:
                 response = yield managed_client.execute_code(self.request.body.decode('utf-8'))
                 self.write(response)
-            except:
-                traceback.print_exc()
-            finally:
                 self.finish()
+            except Exception as exc:
+                self._handle_request_exception(exc)
 
 class PixieAppHandler(BaseHandler):
     """
@@ -90,7 +140,10 @@ class PixieAppHandler(BaseHandler):
         managed_client = self.session.get_managed_client(self, pixieapp_def, True)
         if pixieapp_def is not None:
             yield pixieapp_def.warmup(managed_client)
-            code = pixieapp_def.get_run_code(self.session, self.session.get_pixieapp_run_id(self, pixieapp_def))
+            code = pixieapp_def.get_run_code(
+                self.session,
+                self.session.get_pixieapp_run_id(self, pixieapp_def)
+            )
         else:
             instance_name = self.session.getInstanceName(clazz)
             code = """
@@ -108,7 +161,7 @@ clazz = "{clazz}"
 
         with (yield managed_client.lock.acquire()):
             response = yield managed_client.execute_code(code, self.result_extractor)
-            self.render("template/main.html", response = response, title=pixieapp_def.title if pixieapp_def is not None else None)
+            self.render("template/main.html", response=response, title=pixieapp_def.title if pixieapp_def is not None else None)
 
     def result_extractor(self, result_accumulator):
         res = []
@@ -149,15 +202,58 @@ class PixieAppListHandler(BaseHandler):
         self.redirect("/admin/apps")
 
 class AdminHandler(BaseHandler):
+    def fetch_logs(self):
+        with open( PixieGatewayApp.instance().log_path) as log_file:
+            return "\n".join(deque(log_file, 100))
+    @tornado.web.authenticated
     def get(self, tab_id):
         tab_definitions = OrderedDict([
-            ("apps", {"name": "PixieApps", "path": "pixieappList.html", "description": "Published PixieApps",
+            ("apps", {"name": "PixieApps", "path": "admin/pixieappList.html", "description": "Published PixieApps",
                       "args": lambda: {"pixieapp_list":NotebookMgr.instance().notebook_pixieapps()}}),
-            ("charts", {"name": "Charts", "path": "chartsList.html", "description": "Shared Charts"}),
-            ("stats", {"name": "Kernel Stats", "path": "adminStats.html", "description": "PixieGateway Statistics"})
+            ("charts", {"name": "Charts", "path": "admin/chartsList.html", "description": "Shared Charts"}),
+            ("stats", {
+                "default": {"name": "Kernel Stats", "path": "admin/adminStats.html", "description": "PixieGateway Statistics"},
+                "app": {
+                    "name": "PixieApp Details", "path": "admin/pixieappDetails.html", 
+                    "description": "PixieApp Details", "manager":"pixiegateway.admin.AppController"
+                }
+            }
+            ),
+            ("logs", {"name": "Server Logs", "path": "admin/adminLogs.html", "description": "Server logs",
+                      "args": lambda: {"logs": self.fetch_logs()}})
         ])
-        tab_id = tab_id or "apps"
-        self.render("template/adminConsole.html", tab_definitions=tab_definitions, selected_tab_id=tab_id)
+        tab_id, content_definition = self.compute_tab_id(tab_definitions, tab_id or "apps")
+        self.render(
+            "template/admin/adminConsole.html",
+            tab_definitions=tab_definitions,
+            selected_tab_id=tab_id,
+            content_definition=content_definition
+        )
+
+    def compute_tab_id(self, tab_definitions, tab_id):
+        parts = tab_id.split("/")
+        tab_id = parts[0]
+        if tab_id not in tab_definitions:
+            raise Exception("Invalid url")
+
+        content_definition = tab_definitions[tab_id]
+        if "default" in content_definition:
+            content_definition = content_definition[parts[1] if len(parts) > 1 else 'default']
+            if len(parts) > 2:
+                parts = parts[1:]
+                if len(parts) % 2 != 0:
+                    raise Exception("Invalid url")
+                content_definition = content_definition.copy()
+                orgs_arg_callable = content_definition.get("args", None)
+                def args_wrapper():
+                    results = orgs_arg_callable() if orgs_arg_callable is not None else {}
+                    ite = iter(parts)
+                    results.update({p:next(ite) for p in ite})
+                    if "manager" in content_definition:
+                        results['manager'] = import_object(content_definition['manager'])(results)
+                    return results
+                content_definition["args"] = args_wrapper
+        return tab_id, content_definition
 
 class PixieAppPublishHandler(BaseHandler):
     @gen.coroutine
@@ -170,7 +266,7 @@ class PixieAppPublishHandler(BaseHandler):
             self.write(json.dumps(pixieapp_model))
             self.finish()
         except Exception as exc:
-            print(traceback.print_exc())
+            app_log.error(traceback.print_exc())
             raise web.HTTPError(400, u'Publish PixieApp error: {}'.format(exc))
 
 class ChartShareHandler(BaseHandler):
@@ -183,7 +279,7 @@ class ChartShareHandler(BaseHandler):
             self.write(json.dumps(chart_model))
             self.finish()
         except Exception as exc:
-            print(traceback.print_exc())
+            app_log.error(traceback.print_exc())
             raise web.HTTPError(400, u'Share Chart error: {}'.format(exc))
 
     @gen.coroutine
@@ -279,25 +375,33 @@ class ChartsHandler(BaseHandler):
     def get(self, page_num=0, page_size=10):
         payload = yield gen.maybe_future(SingletonChartStorage.instance().get_charts(int(page_num), int(page_size)))
         self.write(payload)
+        self.finish()
 
 class StatsHandler(BaseHandler):
     """
     Provides various stats about the running kernels
     """
-    def initialize(self, km):
-        self.kernel_manager = km
-
+    @gen.coroutine
     def get(self, command):
+        if command == "kernels":
+            specs = yield gen.maybe_future( ManagedClientPool.instance().list_kernel_specs() )
+            specs = {k:v for k,v in iteritems(specs) if v['spec']['language'] == 'python'}
+            for key, value in iteritems(specs):
+                value['default'] = True if key == ('python3' if PY3 else 'python2') else False
+            self.write(specs)
+            self.finish()
+        else:
+            yield self._process_command(command)
+
+    @gen.coroutine
+    @tornado.web.authenticated
+    def _process_command(self, command):
         if command is None:
-            stats = ManagedClientPool.instance().get_stats()
+            stats = yield gen.maybe_future(ManagedClientPool.instance().get_stats())
             for mc_id in stats:
                 stats[mc_id]['users'] = SessionManager.instance().get_users_stats(mc_id)
             self.write(stats)
-        elif command == "kernels":
-            specs = self.kernel_manager.kernel_spec_manager.get_all_specs()
-            for k, v in iteritems(specs):
-                v['default'] = True if k == ('python3' if PY3 else 'python2') else False
-            self.write(specs)
+            self.finish()
         else:
             raise web.HTTPError(400, u'Unknown stat command: {}'.format(command))
 

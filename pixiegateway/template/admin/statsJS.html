@@ -6,6 +6,15 @@
                 url: "/stats",
                 contentType: "text/plain",
                 success: function(data){
+                    function createAppsList(kernel_id, appStats){
+                        var html = "";
+                        appStats.forEach(function(app){
+                            var name = app['appName'];
+                            var status = app["status"]
+                            html += '<div><a href="/admin/stats/app/' + name + '/kernel/' + kernel_id+ '">' + name + ' (' + status + ")</a></div>";
+                        })
+                        return html;
+                    }
                     for (var key in data){
                         var runStats = data[key]["run_stats"];
                         var appStats = data[key]["app_stats"];
@@ -14,7 +23,7 @@
                             "kernel_name": runStats["kernel_name"],
                             "status": runStats["status"],
                             "busy_ratio": Math.round(runStats["busy_ratio"] * 10)/10 + "%",
-                            "apps": appStats.join(", ") || "None",
+                            "apps": createAppsList(key, appStats) || "None",
                             "users": userStats.count
                         }
                         if (!displayStats[key]){
