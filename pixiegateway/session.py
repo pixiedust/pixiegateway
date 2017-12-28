@@ -122,7 +122,7 @@ except Exception as e:
                     raise Exception("Pixieapp has been restarted for this session. Please refresh the page")
         if managed_client is None:
             raise Exception("Invalid run_id: {} - {}".format(run_id, pixieapp_def))
-        return managed_client
+        raise gen.Return(managed_client)
 
 class SessionManager(SingletonConfigurable):
     """
