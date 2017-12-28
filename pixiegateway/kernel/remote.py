@@ -190,7 +190,8 @@ class RemoteKernelManager(BaseKernelManager):
                     return
                 else:
                     kernel_handle.kernel_info.set_kernel_state()
-                    return kernel_handle.kernel_info.future.set_result(kernel_handle)
+                    kernel_handle.kernel_info.future.set_result(kernel_handle)
+                    return
                 self._write_message(kernel_handle, 'kernel_info_request')
                 while True:
                     try:
