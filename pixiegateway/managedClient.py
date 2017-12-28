@@ -14,7 +14,7 @@
 # limitations under the License.
 # -------------------------------------------------------------------------------
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import time
 from six import iteritems
 from tornado import locks, gen
@@ -37,8 +37,8 @@ class ManagedClient(object):
         self.installed_modules = []
         self.app_stats = None
         self.run_stats = None
-        #auto-start
-        self.start(kernel_name)
+        self.lock = locks.Lock()
+        self.kernel_handle = None
 
     def get_app_stats(self, pixieapp_def, stat_name = None):
         name = pixieapp_def.name
@@ -68,21 +68,36 @@ class ManagedClient(object):
     def start(self, kernel_name=None):
         self.app_stats = ManagedClientAppMetrics()
         self.run_stats = ManagedClientRunMetrics()
+        def on_failure(exc):
+            app_log.error("Kernel not started correctly: %s", exc)
         self.kernel_handle = yield gen.maybe_future(self.kernel_manager.start_kernel(
             kernel_name=kernel_name,
-            iopub_handler=self.iopub_handler
+            iopub_handler=self.iopub_handler,
+            on_success=self._initialize_kernel,
+            on_failure=on_failure
         ))
+
+    def iopub_handler(self, msg):
+        if msg['header']['msg_type'] == 'status':
+            self.run_stats.update_status(msg['content']['execution_state'])
+
+        if self.current_iopub_handler:
+            self.current_iopub_handler(msg)
+
+    @gen.coroutine
+    def _initialize_kernel(self, kernel_handle):
+        self.kernel_handle = kernel_handle
 
         #start the stats
         self.run_stats.start(
-            self.kernel_manager.get_kernel_name(self.kernel_handle), 
+            self.kernel_manager.get_kernel_name(self.kernel_handle),
             self.kernel_manager.get_kernel_spec(self.kernel_handle)
         )
 
-        self.lock = locks.Lock()
-
         #Initialize PixieDust
-        future = self.execute_code("""
+        with (yield self.lock.acquire()):
+            future = self.execute_code(
+                """
 import pixiedust
 import pkg_resources
 import json
@@ -95,28 +110,24 @@ class Customizer():
         options.update( {'nostore_pixiedust': 'true', 'runInDialog': 'false'})
 pixieapp.pixieAppRunCustomizer = Customizer()
 print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistributions())} ))
-            """, lambda acc: json.dumps([msg['content']['text'] for msg in acc if msg['header']['msg_type'] == 'stream'], default=self._date_json_serializer))
-    
-        def done(fut):
-            results = json.loads(fut.result())
-            for result in results:
-                try:
-                    val = json.loads(result)
-                    if isinstance(val, dict) and "installed_modules" in val:
-                        self.installed_modules = val["installed_modules"]
-                        break
-                except:
-                    pass
-            app_log.debug("Installed modules %s", self.installed_modules)
-        future.add_done_callback(done)
-        raise gen.Return(future)
+            """,
+                lambda acc: json.dumps([msg['content']['text'] for msg in acc if msg['header']['msg_type'] == 'stream'], default=self._date_json_serializer),
+                timeout=30
+            )
 
-    def iopub_handler(self, msg):
-        if msg['header']['msg_type'] == 'status':
-            self.run_stats.update_status(msg['content']['execution_state'])
-
-        if self.current_iopub_handler:
-            self.current_iopub_handler(msg)
+            def done(fut):
+                results = json.loads(fut.result())
+                for result in results:
+                    try:
+                        val = json.loads(result)
+                        if isinstance(val, dict) and "installed_modules" in val:
+                            self.installed_modules = val["installed_modules"]
+                            break
+                    except:
+                        pass
+                app_log.debug("Installed modules %s", self.installed_modules)
+            future.add_done_callback(done)
+            yield future
 
     @property
     def kernel_id(self):
@@ -163,7 +174,7 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
     def _result_extractor(self, result_accumulator):
         return json.dumps(result_accumulator, default=self._date_json_serializer)
 
-    def execute_code(self, code, result_extractor = None, done_callback = None):
+    def execute_code(self, code, result_extractor = None, done_callback = None, timeout=None):
         """
         Asynchronously execute the given code using the underlying managed kernel client
         Note: this method is not synchronized, it is the responsibility of the caller to synchronize using the lock member variable
@@ -184,7 +195,6 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
         Future
         
         """
-        app_log.debug("executing code: {}".format(code))
         if result_extractor is None:
             result_extractor = self._result_extractor
         code = PixieGatewayApp.instance().prepend_execute_code + "\n" + code
@@ -215,7 +225,13 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
 
         if done_callback is not None:
             future.add_done_callback(done_callback)
-        return future
+
+        #attach the future to the kernel to be notified if it dies
+        self.kernel_manager.register_execute_future(self.kernel_handle, future)
+        if timeout is None:
+            return future
+        else:
+            return gen.with_timeout(timedelta(seconds=timeout), future)
 
 class ManagedClientAppMetrics(dict):
     def __init__(self, *args):
@@ -295,21 +311,22 @@ class ManagedClientPool(SingletonConfigurable):
         finally:
             log_messages.append("Done Validating Kernels...")
 
+    @gen.coroutine
     def get(self, pixieapp_def=None):
         kernel_name = None if pixieapp_def is None else pixieapp_def.pref_kernel
         if kernel_name is not None:
             kernel_name = None if kernel_name.strip() == "" else kernel_name.strip()
         if (pixieapp_def is None or kernel_name is None) and len(self.managed_clients)>0:
-            return self.managed_clients[0]
+            raise gen.Return(self.managed_clients[0])
         #do we already have a ManagedClient for the pref_kernel
         clients = list(filter(lambda mc: mc.run_stats["kernel_name"] == kernel_name, self.managed_clients))
         if len(clients) > 0:
-            return clients[0]
-        print("Creating a new Managed client for kernel: {}".format(kernel_name))
-        # client = self.kernel_manager.start_kernel(kernel_name=kernel_name)
+            raise gen.Return(clients[0])
+        app_log.info("Creating a new Managed client for kernel: {}".format(kernel_name))
         client = ManagedClient( self.kernel_manager, kernel_name)
         self.managed_clients.append(client)
-        return client
+        yield client.start()
+        raise gen.Return(client)
 
     def get_by_kernel_id(self, kernel_id):
         clients = list(filter(lambda mc: mc.kernel_id == kernel_id, self.managed_clients))

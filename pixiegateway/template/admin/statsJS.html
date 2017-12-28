@@ -20,7 +20,7 @@
                         var appStats = data[key]["app_stats"];
                         var userStats = data[key]["users"];
                         var stats = {
-                            "kernel_name": runStats["kernel_name"],
+                            "kernel_name": '<a href="/admin/stats/kernel/' + key+ '">' + runStats["kernel_name"] + "</a>",
                             "status": runStats["status"],
                             "busy_ratio": Math.round(runStats["busy_ratio"] * 10)/10 + "%",
                             "apps": createAppsList(key, appStats) || "None",

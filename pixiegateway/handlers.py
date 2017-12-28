@@ -41,33 +41,37 @@ from .exceptions import CodeExecutionError
 class BaseHandler(tornado.web.RequestHandler):
     """Base class for all PixieGateway handler"""
     def initialize(self):
-        pass
+        self.output_json_error = False
 
     def _handle_request_exception(self, exc):
-        msg = {
-            "buffers": [],
-            "channel": "iopub",
-            "content": {
-                "data": {
-                    "text/html": "<div>Unexpected error:</div><pre>{}</pre>".format(
-                        str(exc) if isinstance(exc, CodeExecutionError) else traceback.format_exc()
-                        )
+        html_error = "<div>Unexpected error:</div><pre>{}</pre>".format(
+            str(exc) if isinstance(exc, CodeExecutionError) else traceback.format_exc()
+        )
+        if self.output_json_error:
+            msg = {
+                "buffers": [],
+                "channel": "iopub",
+                "content": {
+                    "data": {
+                        "text/html": html_error
+                    },
+                    "metadata": {},
+                    "transient": {}
+                },
+                "header": {
+                    "username": "pixiegateway",
+                    "msg_type": "display_data",
+                    "msg_id": uuid4().hex,
+                    "version": "5.2"
                 },
                 "metadata": {},
-                "transient": {}
-            },
-            "header": {
-                "username": "pixiegateway",
-                "msg_type": "display_data",
-                "msg_id": uuid4().hex,
-                "version": "5.2"
-            },
-            "metadata": {},
-            "msg_id": "",
-            "msg_type":"display_data",
-            "parent_header": {}
-        }
-        self.write(json.dumps([msg]))
+                "msg_id": "",
+                "msg_type":"display_data",
+                "parent_header": {}
+            }
+            self.write(json.dumps([msg]))
+        else:
+            self.write(html_error)
         self.finish()
 
     def get_template_path(self):
@@ -114,10 +118,13 @@ class ExecuteCodeHandler(BaseHandler):
 Common Base Tornado Request Handler class.
 Implement generic kernel code execution routine
     """
+    def initialize(self):
+        self.output_json_error = True
+
     @gen.coroutine
     def post(self, *args, **kwargs):
         run_id = args[0]
-        managed_client = self.session.get_managed_client_by_run_id(run_id)
+        managed_client = yield self.session.get_managed_client_by_run_id(run_id)
         with (yield managed_client.lock.acquire()):
             try:
                 response = yield managed_client.execute_code(self.request.body.decode('utf-8'))
@@ -137,7 +144,7 @@ class PixieAppHandler(BaseHandler):
         #check the notebooks first
         pixieapp_def = NotebookMgr.instance().get_notebook_pixieapp(clazz)
         code = None
-        managed_client = self.session.get_managed_client(self, pixieapp_def, True)
+        managed_client = yield self.session.get_managed_client(self, pixieapp_def, True)
         if pixieapp_def is not None:
             yield pixieapp_def.warmup(managed_client)
             code = pixieapp_def.get_run_code(
@@ -216,6 +223,10 @@ class AdminHandler(BaseHandler):
                 "app": {
                     "name": "PixieApp Details", "path": "admin/pixieappDetails.html", 
                     "description": "PixieApp Details", "manager":"pixiegateway.admin.AppController"
+                },
+                "kernel":{
+                    "name": "Kernel Details", "path": "admin/kernelDetails.html",
+                    "description": "Kernel Details", "manager": "pixiegateway.admin.KernelController"
                 }
             }
             ),
@@ -417,7 +428,7 @@ class PixieDustLogHandler(BaseHandler):
 import pixiedust
 %pixiedustLog -l debug
         """
-        managed_client = ManagedClientPool.instance().get()
+        managed_client = yield ManagedClientPool.instance().get()
         with (yield managed_client.lock.acquire()):
             try:
                 response = yield managed_client.execute_code(code, self.result_extractor)
