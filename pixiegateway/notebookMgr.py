@@ -123,13 +123,15 @@ class NotebookMgr(SingletonConfigurable):
                 nb_contents = self.loader.load(full_path)
                 if nb_contents is not None:
                     with nb_contents:
-                        app_log.debug("loading Notebook: %s",path)
+                        app_log.debug("loading Notebook: %s", full_path)
                         notebook = nbformat.read(nb_contents, as_version=4)
                         #Load the pixieapp definition if any
                         pixieapp_def = self.read_pixieapp_def(notebook)
                         if pixieapp_def is not None and pixieapp_def.is_valid:
                             pixieapp_def.location = full_path
                             self.pixieapps[pixieapp_def.name] = pixieapp_def
+                        else:
+                            app_log.info("Skipping Notebook %s because no valid pixieapp was found", full_path)
 
     def read_pixieapp_def(self, notebook):
         #Load the warmup and run code
@@ -157,8 +159,10 @@ def get_symbol_table(rootNode, ctx_symbols=None):
 
 class PixieappDef():
     def __init__(self, namespace, warmup_code, run_code, notebook):
-        self.warmup_code = warmup_code
-        self.run_code = run_code
+        self.raw_warmup_code = warmup_code
+        self.raw_run_code = run_code
+        self._warmup_code = None
+        self._run_code = None
         self.namespace = namespace
         self.location = None
         pixiedust_meta = notebook.get("metadata",{}).get("pixiedust",{})
@@ -167,22 +171,40 @@ class PixieappDef():
         self.pref_kernel = pixiedust_meta.get("kernel", None)
 
         #validate and process the code
-        symbols = get_symbol_table(ast_parse(self.warmup_code + "\n" + self.run_code))
-        pixieapp_root_node = symbols.get('pixieapp_root_node', None)
+        self.symbols = get_symbol_table(ast_parse(self.raw_warmup_code + "\n" + self.raw_run_code))
+        pixieapp_root_node = self.symbols.get('pixieapp_root_node', None)
         self.name = pixieapp_root_node.name if pixieapp_root_node is not None else None
         self.description = ast.get_docstring(pixieapp_root_node) if pixieapp_root_node is not None else None
 
-        if self.is_valid:
-            if self.warmup_code != "":
-                rewrite = RewriteGlobals(symbols, self.namespace)
-                new_root = rewrite.visit(ast_parse(self.warmup_code))
-                self.warmup_code = astunparse.unparse( new_root )
-                app_log.debug("New warmup code: %s", self.warmup_code)
+    @property
+    def warmup_code(self):
+        if self._warmup_code is not None:
+            return self._warmup_code
+        if not self.is_valid:
+            raise Exception("Trying to access warmup_code but not a valid pixieapp notebook")
+        if self.symbols is not None and self.raw_warmup_code != "":
+            rewrite = RewriteGlobals(self.symbols, self.namespace)
+            new_root = rewrite.visit(ast_parse(self.raw_warmup_code))
+            self._warmup_code = astunparse.unparse(new_root)
+            app_log.debug("New warmup code: %s", self._warmup_code)
+        else:
+            self._warmup_code = ""
+        return self._warmup_code
 
-            rewrite = RewriteGlobals(symbols, self.namespace)
-            new_root = rewrite.visit(ast_parse(self.run_code))
-            self.run_code = astunparse.unparse( new_root )
-            app_log.debug("new run code: %s", self.run_code)
+    @property
+    def run_code(self):
+        if self._run_code is not None:
+            return self._run_code
+        if not self.is_valid:
+            raise Exception("Trying to access run_code but not a valid pixieapp notebook")
+        if self.symbols is not None and self.raw_run_code != "":
+            rewrite = RewriteGlobals(self.symbols, self.namespace)
+            new_root = rewrite.visit(ast_parse(self.raw_run_code))
+            self._run_code = astunparse.unparse(new_root)
+            app_log.debug("new run code: %s", self._run_code)
+        else:
+            self._run_code = ""
+        return self._run_code
 
     def to_dict(self):
         return {

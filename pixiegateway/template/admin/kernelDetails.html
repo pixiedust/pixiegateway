@@ -1,0 +1,30 @@
+<div>Here come the kernel details for {{manager.kernel_id}}</div>
+
+<ul class="nav nav-tabs">
+    <li class="active"><a data-toggle="tab" href="#details">Details</a></li>
+    <li><a data-toggle="tab" href="#kernelSpec">Kernel Spec</a></li>
+    <li><a data-toggle="tab" href="#kernelLog">Log</a></li>
+</ul>
+        
+<div class="tab-content">
+    <div id="details" class="tab-pane fade in active">
+        <div>Kernel Name: {{manager.kernel_name}}</div>
+        <div>Kernel Id: {{manager.kernel_id}}</div>
+        <div>Status: {{manager.status}}</div>
+        {%if manager.error%}
+        <div>
+            <pre>
+                {{manager.error}}
+            </pre>
+        </div>
+        {%end%}
+    </div>
+    <div id="kernelSpec" class="tab-pane fade">
+        Here comes the kernel Spec
+    </div>
+    <div id="kernelLog" class="tab-pane fade">
+        {%for log_message in manager.log_messages%}
+        <div>{{log_message}}</div>
+        {%end%}
+    </div>
+</div>

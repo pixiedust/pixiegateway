@@ -15,3 +15,4 @@
 # -------------------------------------------------------------------------------
 
 from .appController import AppController
+from .kernelController import KernelController
