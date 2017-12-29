@@ -17,6 +17,7 @@ import time
 import uuid
 from traitlets import Int
 from traitlets.config.configurable import SingletonConfigurable
+from tornado import gen
 from tornado.ioloop import PeriodicCallback
 from tornado.log import app_log
 from .pixieGatewayApp import PixieGatewayApp
@@ -98,28 +99,30 @@ except Exception as e:
             cookie = cookie.decode("utf-8")
         return cookie
 
+    @gen.coroutine
     def get_managed_client(self, request_handler, pixieapp_def=None, retry=False):
         if pixieapp_def is None:
-            return ManagedClientPool.instance().get()
+            raise gen.Return((yield ManagedClientPool.instance().get()))
 
         run_id = self.get_pixieapp_run_id(request_handler, pixieapp_def)
-        return self.get_managed_client_by_run_id(run_id, pixieapp_def, retry)
+        raise gen.Return((yield self.get_managed_client_by_run_id(run_id, pixieapp_def, retry)))
 
+    @gen.coroutine
     def get_managed_client_by_run_id(self, run_id, pixieapp_def = None, retry=False):
         managed_client = self.run_ids[run_id] if run_id in self.run_ids else None
         if pixieapp_def is not None:
             if managed_client is None:
-                managed_client = ManagedClientPool.instance().get(pixieapp_def)
+                managed_client = yield ManagedClientPool.instance().get(pixieapp_def)
                 self.run_ids[run_id] = managed_client
             elif managed_client.get_app_stats(pixieapp_def) is None:
                 del self.run_ids[run_id]
                 if retry:
-                    return self.get_managed_client_by_run_id(run_id, pixieapp_def, False)
+                    raise gen.Return((yield self.get_managed_client_by_run_id(run_id, pixieapp_def, False)))
                 else:
                     raise Exception("Pixieapp has been restarted for this session. Please refresh the page")
         if managed_client is None:
             raise Exception("Invalid run_id: {} - {}".format(run_id, pixieapp_def))
-        return managed_client
+        raise gen.Return(managed_client)
 
 class SessionManager(SingletonConfigurable):
     """

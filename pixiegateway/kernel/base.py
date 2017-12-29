@@ -14,7 +14,29 @@
 # limitations under the License.
 # -------------------------------------------------------------------------------
 from abc import ABCMeta, abstractmethod
+from collections import namedtuple, deque
+from logging import Formatter, makeLogRecord
 from six import with_metaclass
+
+class BaseKernelInfo():
+    def __init__(self):
+        self.id = None
+        self.name = None
+        self.state = None
+        self.error = None
+        self.log_messages=deque([], 200)
+        self.log_formatter = Formatter('%(asctime)s - %(name)s - %(message)s')
+
+    def set_kernel_state(self, state = None, error = None):
+        self.state = 'error' if error is not None else 'running' if state is None else state
+        self.error = error
+
+    def log(self, log_message):
+        record = makeLogRecord({
+            "name": self.id,
+            "msg": log_message
+        })
+        self.log_messages.append(self.log_formatter.format(record))
 
 class BaseKernelManager(with_metaclass(ABCMeta)):
     """
@@ -56,9 +78,23 @@ class BaseKernelManager(with_metaclass(ABCMeta)):
 
     @abstractmethod
     def execute(self, kernel_handle, code, silent=False, store_history=True,
-                user_expressions=None, allow_stdin=None, 
+                user_expressions=None, allow_stdin=False, 
                 stop_on_error=True):
         """
         Execute python code on the kernel
+        """
+        pass
+
+    def register_execute_future(self, kernel_handle, future):
+        """
+        registers a code execution future for notification in case the kernel dies
+        """
+        pass
+
+    KernelExecutionState = namedtuple('KernelExecutionState', ['status', 'error', 'log_messages'])
+    @abstractmethod
+    def get_kernel_execution_state(self, kernel_handle):
+        """
+        returns a KernelExecutionState instance
         """
         pass
