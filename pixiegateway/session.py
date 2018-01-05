@@ -59,7 +59,8 @@ class Session(object):
             print("Session successfully shut down: {}".format(future.result()))
 
         for managed_client in list(set(self.run_ids.values())):
-            future = managed_client.execute_code("""
+            try:
+                future = managed_client.execute_code("""
 from pixiedust.utils.shellAccess import ShellAccess
 from pixiedust.display.app import PixieDustApp
 deleted_instances=[]
@@ -76,10 +77,12 @@ except Exception as e:
     import traceback
     for line in traceback.format_stack():
         print(line.strip())
-            """.format(self.namespace),
-                lambda acc: "\n".join([msg['content']['text'] for msg in acc if msg['header']['msg_type'] == 'stream'])
-            )
-            future.add_done_callback(done)
+                """.format(self.namespace),
+                    lambda acc: "\n".join([msg['content']['text'] for msg in acc if msg['header']['msg_type'] == 'stream'])
+                )
+                future.add_done_callback(done)
+            except Exception as exc:
+                print("Error while shutting down instance. For Session shutdown: {}".format(exc))
 
     def _get_run_id_cookie_name(self, pixieapp_def):
         return "pd_runid_{}".format(pixieapp_def.name.replace(" ", "_"))
