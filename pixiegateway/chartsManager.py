@@ -184,7 +184,7 @@ class CloudantChartStorage(ChartStorage):
             response = requests.put( self.build_url(), headers=self.get_headers())
 
         if response.status_code != 200 and response.status_code != 201:
-            app_log.error("Unexcepted error while connecting to cloudant: %s", response.text)
+            app_log.error("Unexcepted error while connecting to cloudant: %s - %s", response.status_code, response.text)
         else:
             app_log.info("Succesfully connected to Cloudant db: %s-%s", self.host, CloudantChartStorage.CHART_DB_NAME)
 
