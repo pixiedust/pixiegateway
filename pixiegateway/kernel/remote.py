@@ -39,10 +39,14 @@ class KernelInfo(BaseKernelInfo):
         self.future = future
         self.running_futures = []
         self.retries = 0
+        self.max_connection_retries = 5
         self.ws_conn = None
 
     def set_kernel_state(self, state = None, error = None):
         super(KernelInfo, self).set_kernel_state(state, error)
+        log_message = state or error
+        if log_message:
+            self.log(log_message)
         if error is not None:
             for future in self.running_futures:
                 if not future.done():
@@ -51,8 +55,8 @@ class KernelInfo(BaseKernelInfo):
 
     def clear(self):
         self.retries = self.retries + 1
-        if self.retries > 2:
-            self.set_kernel_state(error = "Couldn't start kernel after 2 retries")
+        if self.retries > self.max_connection_retries:
+            self.set_kernel_state(error = "Couldn't start kernel after {} retries".format(self.max_connection_retries))
             raise Exception("Exceeded max retries to start the kernel")
         if self.ws_conn is not None and self.ws_conn.protocol is not None:
             self.log("Closing the ws_conn")
@@ -69,25 +73,42 @@ class RemoteKernelManager(BaseKernelManager):
         self.config = config
         self.http_client = AsyncHTTPClient()
 
+        #Delete any existing kernels
+        self._delete_existing_kernels()
+
+    @gen.coroutine
+    def _delete_existing_kernels(self):
+        kernels = yield self.list_kernels()
+        for kernel in kernels:
+            app_log.info("Deleting existing kernel: {}".format(kernel['id']))
+            yield self.delete_kernel(kernel['id'])
+
     @gen.coroutine
     def start_kernel(self, kernel_name, iopub_handler=None, **kwargs):
-        kernel_env = {k: v for (k, v) in dict(os.environ).items() if k.startswith('KERNEL_')
-                      or k in os.environ.get('KG_ENV_WHITELIST', '').split(",")}
-        json_body = json_encode({'name': kernel_name, 'env': kernel_env})
+        # kernel_env = {k: v for (k, v) in dict(os.environ).items() if k.startswith('KERNEL_')
+        #               or k in os.environ.get('KG_ENV_WHITELIST', '').split(",")}
+        # json_body = json_encode({'name': kernel_name, 'env': kernel_env})
+        json_body = json_encode({'name': kernel_name})
         def message_callback(message):
             app_log.debug("got a message %s", message)
             try:
                 msg = json.loads(message) if message is not None else None
                 if msg is None or self.is_kernel_dead(msg):
                     ws_conn = kernel_handle.kernel_info.ws_conn
-                    kernel_handle.kernel_info.log(
-                        "Connection Closed or dead!!!!! {} - {}".format(ws_conn.close_code, ws_conn.close_reason)
-                    )
-                    kernel_handle.kernel_info.set_kernel_state(
-                        error = "kernel died or connection closed unexpectedly"
-                    )
+                    kernel_handle.kernel_info.retries = kernel_handle.kernel_info.retries + 1
+                    if kernel_handle.kernel_info.retries < kernel_handle.kernel_info.max_connection_retries:
+                        kernel_handle.kernel_info.set_kernel_state(
+                            state = "Kernel died or connection closed unexpectedly: Trying to reconnect in 5 seconds"
+                        )
+                        IOLoop.current().call_later(5, self._connect_to_kernel, kernel_handle)
+                    else:
+                        kernel_handle.kernel_info.log(
+                            "Connection Closed or dead!!!!! {} - {}".format(ws_conn.close_code, ws_conn.close_reason)
+                        )
+                        kernel_handle.kernel_info.set_kernel_state(
+                            error = "kernel died or connection closed unexpectedly"
+                        )
                     if not kernel_handle.kernel_info.future.done():
-                        print("Setting exception in future")
                         kernel_handle.kernel_info.future.set_exception(
                             Exception("Kernel died or connection closed unexpectedly")
                         )
@@ -130,13 +151,17 @@ class RemoteKernelManager(BaseKernelManager):
         if on_success is not None or on_failure is not None:
             @gen.coroutine
             def done_callback(kernel_future):
-                if kernel_future.exception() is not None:
-                    kernel_handle.kernel_info.log("kernel has exception: {}".format(kernel_future.exception()))
-                    if on_failure is not None:
-                        on_failure(kernel_future.exception())
-                elif on_success is not None:
-                    on_success(kernel_handle)
-                kernel_handle.kernel_info.log("kernel future is done: {}".format(kernel_future))
+                try:
+                    if kernel_future.exception() is not None:
+                        kernel_handle.kernel_info.log("kernel has exception: {}".format(kernel_future.exception()))
+                        if on_failure is not None:
+                            on_failure(kernel_future.exception())
+                    elif on_success is not None:
+                        on_success(kernel_handle)
+                except Exception as exc:
+                    kernel_handle.kernel_info.log("Unexpected exception: {}".format(exc))
+                else:
+                    kernel_handle.kernel_info.log("kernel future is done: {}".format(kernel_future))
             future.add_done_callback(done_callback)
         return kernel_handle
 
@@ -164,7 +189,6 @@ class RemoteKernelManager(BaseKernelManager):
         raise gen.Return((yield self._connect_to_kernel(kernel_handle)))
 
     def _connect_to_kernel(self, kernel_handle):
-        print("Trying to connect")
         kernel_handle.kernel_info.set_kernel_state(state = "Connecting to kernel")
         try:
             kernel_id = kernel_handle.kernel_info.id
@@ -172,7 +196,6 @@ class RemoteKernelManager(BaseKernelManager):
                 '/api/kernels/{}/channels'.format(url_escape(kernel_id)),
                 ws=True
             )
-            print("connect url is {}".format(url))
             request = HTTPRequest(url, headers=headers)
             message_callback = kernel_handle.connect_args['message_callback']
             ws_conn_future = websocket_connect(
@@ -313,8 +336,9 @@ class RemoteKernelManager(BaseKernelManager):
             'Accept': 'application/json',
             'Content-Type': 'application/json'
         }
-        if "notebook_gateway" in self.config:
-            url = "{}/{}".format(self.config["notebook_gateway"].strip("/"), path.strip("/"))
+        gateway_key = "notebook_gateway_websocket" if ws is True and "notebook_gateway_websocket" in self.config else "notebook_gateway" 
+        if gateway_key in self.config:
+            url = "{}/{}".format(self.config[gateway_key].strip("/"), path.strip("/"))
             headers['Authorization'] = 'Basic {}'.format(
                 base64.b64encode('{}:{}'.format(self.config['user'], self.config['password']).encode()).decode()
             )
@@ -338,7 +362,8 @@ class RemoteKernelManager(BaseKernelManager):
         )
         if response.error is not None:
             raise response.error
-        raise gen.Return(self.to_json(response.body))
+        if response.body:
+            raise gen.Return(self.to_json(response.body))
 
     @gen.coroutine
     def list_kernel_specs(self):
@@ -346,3 +371,13 @@ class RemoteKernelManager(BaseKernelManager):
         if "kernelspecs" in payload:
             payload = payload["kernelspecs"]
         raise gen.Return(payload)
+
+    @gen.coroutine
+    def list_kernels(self):
+        raise gen.Return((
+            yield self.do_request("api/kernels")
+        ))
+        
+    @gen.coroutine
+    def delete_kernel(self, kernel_id):
+        yield self.do_request("api/kernels/{}".format(kernel_id), method='DELETE')

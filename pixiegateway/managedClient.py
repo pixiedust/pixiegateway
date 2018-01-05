@@ -116,6 +116,8 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
             )
 
             def done(fut):
+                if fut.exception():
+                    return app_log.error("Unexcepted exception %s", fut.exception())
                 results = json.loads(fut.result())
                 for result in results:
                     try:
