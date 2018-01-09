@@ -124,7 +124,21 @@ Implement generic kernel code execution routine
     @gen.coroutine
     def post(self, *args, **kwargs):
         run_id = args[0]
-        managed_client = yield self.session.get_managed_client_by_run_id(run_id)
+        #First check if it's a kernel_id (admin mode)
+        managed_client = ManagedClientPool.instance().get_by_kernel_id(run_id)
+        if managed_client is not None:
+            yield self.admin_mode_execute_code(managed_client)
+        else:
+            managed_client = yield self.session.get_managed_client_by_run_id(run_id)
+            yield self.execute_code(managed_client)
+
+    @gen.coroutine
+    @tornado.web.authenticated
+    def admin_mode_execute_code(self, managed_client):
+        yield self.execute_code(managed_client)
+
+    @gen.coroutine
+    def execute_code(self, managed_client):
         with (yield managed_client.lock.acquire()):
             try:
                 response = yield managed_client.execute_code(self.request.body.decode('utf-8'))
