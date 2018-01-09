@@ -33,6 +33,7 @@ class ManagedClient(object):
     """
     def __init__(self, kernel_manager, kernel_name=None):
         self.kernel_manager = kernel_manager
+        self.kernel_name = kernel_name
         self.current_iopub_handler = None
         self.installed_modules = []
         self.app_stats = None
@@ -66,6 +67,7 @@ class ManagedClient(object):
 
     @gen.coroutine
     def start(self, kernel_name=None):
+        kernel_name = kernel_name or self.kernel_name
         self.app_stats = ManagedClientAppMetrics()
         self.run_stats = ManagedClientRunMetrics()
         def on_failure(exc):
@@ -166,7 +168,7 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
         with (yield self.lock.acquire()):
             yield gen.maybe_future(self.shutdown())
             self.installed_modules = []
-            yield gen.maybe_future(self.start(self.run_stats["kernel_name"]))
+        yield gen.maybe_future(self.start(self.run_stats["kernel_name"]))
 
     def _date_json_serializer(self, obj):
         if isinstance(obj, datetime):

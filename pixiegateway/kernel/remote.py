@@ -139,7 +139,6 @@ class RemoteKernelManager(BaseKernelManager):
         raise gen.Return(kernel_handle)
 
     def _get_kernel_handle(self, kernel_id, kernel_name, **kwargs):
-        print("kernel client initialized")
         future = Future()
         kernel_handle = namedtuple(
             "KernelHandle", ['kernel_id', 'kernel_name', 'connect_args', 'kernel_info']
@@ -281,12 +280,15 @@ class RemoteKernelManager(BaseKernelManager):
     def get_kernel_id(self, kernel_handle):
         return kernel_handle.kernel_id
 
+    @gen.coroutine
     def shutdown(self, kernel_handle):
         """
         Shuts down the kernel
         Kernel_handle must have been obtained by a call to start_kernel
         """
-        pass
+        kernel_id = kernel_handle.kernel_info.id
+        app_log.info("Deleting existing kernel: %s", kernel_id)
+        yield self.delete_kernel(kernel_id)
 
     def _write_message(self, kernel_handle, msg_type, content=None):
         msg_id = uuid4().hex
