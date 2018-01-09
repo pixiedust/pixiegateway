@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------------
-# Copyright IBM Corp. 2017
+# Copyright IBM Corp. 2018
 # 
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -------------------------------------------------------------------------------
+from uuid import uuid4
+import json
 from pixiegateway.managedClient import ManagedClientPool
 
 class KernelController():
@@ -42,3 +44,16 @@ class KernelController():
     @property
     def log_messages(self):
         return self.execution_state.log_messages
+
+    @property
+    def command(self):
+        return json.dumps({
+            "prefix": uuid4().hex,
+            "command": "",
+            "avoidMetadata": True,
+            "options": {"gateway": self.kernel_id, "cellId":"dummy"}
+        }).replace('&', '&amp;')\
+            .replace("'", '&apos;')\
+            .replace('"', '&quot;')\
+            .replace('<', '&lt;')\
+            .replace('>', '&gt;')

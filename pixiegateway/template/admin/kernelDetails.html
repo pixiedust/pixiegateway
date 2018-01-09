@@ -1,9 +1,26 @@
+{% autoescape None %}
+<link rel="stylesheet" href="/static/codemirror/codemirror.css">
+<script src="/static/codemirror/codemirror.js"></script>
+<script src="/static/codemirror/python/python.js"></script>
+<script src="/static/codemirror/addon/display/placeholder.js"></script>
+<style type="text/css">
+    .CodeMirror {
+        border: 1px solid black;
+        height:auto;
+        min-height: 200px;
+    }
+    .CodeMirror pre.CodeMirror-placeholder { 
+        color: #999; 
+    }
+</style>
+
 <div>Here come the kernel details for {{manager.kernel_id}}</div>
 
 <ul class="nav nav-tabs">
     <li class="active"><a data-toggle="tab" href="#details">Details</a></li>
     <li><a data-toggle="tab" href="#kernelSpec">Kernel Spec</a></li>
     <li><a data-toggle="tab" href="#kernelLog">Log</a></li>
+    <li><a data-toggle="tab" href="#pythonConsole">Python Console</a></li>
 </ul>
         
 <div class="tab-content">
@@ -26,5 +43,40 @@
         {%for log_message in manager.log_messages%}
         <div>{{log_message}}</div>
         {%end%}
+    </div>
+    <div id="pythonConsole" class="tab-pane fade">
+        <textarea style="display:none" id="pythonConsoleEditor" placeholder="Enter Python code to be sent to the kernel here..."></textarea>
+        <div style="margin-top:10px;margin-bottom:10px">
+            <button id="consoleSubmit" 
+                pixiedust="{{manager.command}}" 
+                pd_target="consoleResults"
+                type="submit" class="btn btn-primary">
+                <pd_script>!pip show pixiedust</pd_script>
+                Submit
+            </button>
+        </div>
+        <div id="consoleResults"></div>
+        <script type="text/javascript">
+            var editor = CodeMirror.fromTextArea(document.getElementById("pythonConsoleEditor"), {
+                mode: {name: "python",version: 3,singleLineStringErrors: false},
+                lineNumbers: true,
+                indentUnit: 4,
+                matchBrackets: true,
+                readOnly: false,
+                viewportMargin: Infinity
+            });
+            editor.setSize('100%', 200);
+            $('a[data-toggle="tab"][href="#pythonConsole"]').on('shown.bs.tab', function (e) {
+                editor.refresh();
+            });
+            $("#consoleSubmit").click(function(){
+                var pd_script = $(this).find("> pd_script");
+                if (pd_script.length == 0){
+                    $(this).append("<pd_script>\n"+editor.getValue()+"</pd_script>");
+                }else{
+                    pd_script.replaceWith("<pd_script>\n"+editor.getValue()+"</pd_script>");
+                }
+            });
+        </script>
     </div>
 </div>
