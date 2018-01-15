@@ -98,6 +98,24 @@ from pixiedust.display.app import *
 class TestApp""" + classdef + """:
     def setup(self):
         self.contents = [ns_var1, ns_var2]
+        self.__pd_gateway_namespace__ = 'ns_'
+TestApp().run()
+    """
+},{
+    "src":"""
+from pixiedust.display.app import *
+@PixieApp
+class TestAppWithoutSetup""" + classdef + """:
+    pass
+TestApp().run()
+    """,
+    "target":"""
+from pixiedust.display.app import *
+@PixieApp
+class TestAppWithoutSetup""" + classdef + """:
+    pass
+    def setup(self):
+        self.__pd_gateway_namespace__ = 'ns_'
 TestApp().run()
     """
 }

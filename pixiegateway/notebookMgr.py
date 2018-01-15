@@ -16,6 +16,7 @@
 import ast
 import io
 import os
+import six
 import nbformat
 import astunparse
 from traitlets.config.configurable import SingletonConfigurable
@@ -357,6 +358,7 @@ class RewriteGlobals(ast.NodeTransformer):
             if isinstance(dec, ast.Name) and dec.id == "PixieApp":
                 self.pixieApp = node.name
                 self.pixieAppRootNode = node
+                self.assign_namespace(node)
         if self.pixieApp != node.name and self.level == 1 and self.isGlobal(node.name):
             node.name = self.namespace + node.name
         return node
@@ -373,3 +375,42 @@ class RewriteGlobals(ast.NodeTransformer):
     @onvisit
     def generic_visit(self, node):
         return node
+
+    def assign_namespace(self, root):
+        setup_def = [func for func in root.body if isinstance(func, ast.FunctionDef) and func.name == 'setup']
+        setup_def = None if len(setup_def) == 0 else setup_def[0]
+        if setup_def is None:
+            setup_node = ast.FunctionDef(
+                name='setup',
+                args=ast.arguments(
+                    args=[ast.arg(arg='self', annotation=None) if six.PY3 else ast.Name(id='self', ctx=ast.Param())],
+                    vararg=None, kwarg=None, defaults=[]
+                ),
+                body=[self.get_assign_node(self.namespace)],
+                decorator_list=[]
+            )
+            root.body.append(setup_node)
+        else:
+            assign_node = [assign for assign in setup_def.body 
+                if isinstance(assign, ast.Assign) and self.has_target(assign.targets, "__pd_gateway_namespace__")
+            ]
+            if len(assign_node) == 0:
+                setup_def.body.append(self.get_assign_node(self.namespace))
+
+    def has_target(self, targets, name):
+        for target in targets:
+            if isinstance(target, ast.Attribute) and target.attr == name:
+                return True
+        return False
+
+    def get_assign_node(self, namespace):
+        return ast.Assign(
+            targets=[
+                ast.Attribute(
+                    value=ast.Name(id='self', ctx=ast.Load()), 
+                    attr='__pd_gateway_namespace__', 
+                    ctx=ast.Store()
+                )
+            ], 
+            value=ast.Str(s=namespace)
+        )
