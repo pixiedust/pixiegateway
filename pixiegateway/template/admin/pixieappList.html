@@ -10,7 +10,7 @@
         <tbody>
             {% for p in pixieapp_list%}
             <tr>
-                <td><a target="_blank" href="/pixieapp/{{p.name}}">{{p.name}}</td>
+                <td><a target="_blank" href="{{p.url}}">{{p.name}}</td>
                 <td>{{p.description}}</td>
                 <td>{{p.location}}</td>
             </tr>

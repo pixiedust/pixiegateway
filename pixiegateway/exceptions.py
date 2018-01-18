@@ -27,3 +27,10 @@ class CodeExecutionError(Exception):
             self.error_name, self.error_value, self.trace, self.code
         )
         super(CodeExecutionError, self).__init__(message)
+
+class AppAccessError(Exception):
+    """
+    Exception thrown when access to a PixieApp has not been authorized
+    """
+    def __init__(self):
+        super(AppAccessError, self).__init__("Unauthorized Access")

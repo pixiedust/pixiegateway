@@ -36,7 +36,7 @@ from .managedClient import ManagedClientPool
 from .chartsManager import SingletonChartStorage
 from .utils import sanitize_traceback
 from .pixieGatewayApp import PixieGatewayApp
-from .exceptions import CodeExecutionError
+from .exceptions import CodeExecutionError, AppAccessError
 
 class BaseHandler(tornado.web.RequestHandler):
     """Base class for all PixieGateway handler"""
@@ -44,6 +44,9 @@ class BaseHandler(tornado.web.RequestHandler):
         self.output_json_error = False
 
     def _handle_request_exception(self, exc):
+        if isinstance(exc, AppAccessError):
+            return self.send_error(401)
+
         html_error = "<div>Unexpected error:</div><pre>{}</pre>".format(
             str(exc) if isinstance(exc, CodeExecutionError) else traceback.format_exc()
         )
@@ -157,6 +160,9 @@ class PixieAppHandler(BaseHandler):
 
         #check the notebooks first
         pixieapp_def = NotebookMgr.instance().get_notebook_pixieapp(clazz)
+        #validate app security
+        if pixieapp_def is not None:
+            pixieapp_def.validate_security(self)
         code = None
         managed_client = yield self.session.get_managed_client(self, pixieapp_def, True)
         if pixieapp_def is not None:
@@ -287,6 +293,9 @@ class PixieAppPublishHandler(BaseHandler):
         try:
             notebook = nbformat.from_dict(json.loads(payload))
             pixieapp_model = yield NotebookMgr.instance().publish(name, notebook)
+            if "url" in pixieapp_model:
+                server = self.request.protocol + "://" + self.request.host
+                pixieapp_model["url"] = server + pixieapp_model["url"]
             self.set_status(200)
             self.write(json.dumps(pixieapp_model))
             self.finish()
