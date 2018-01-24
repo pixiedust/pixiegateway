@@ -16,8 +16,10 @@
 import ast
 import io
 import os
+import six
 import nbformat
 import astunparse
+from uuid import uuid4
 from traitlets.config.configurable import SingletonConfigurable
 from traitlets import Unicode, default
 from tornado import gen
@@ -26,6 +28,7 @@ from tornado.log import app_log
 from tornado.util import import_object
 from .pixieGatewayApp import PixieGatewayApp
 from .managedClient import ManagedClientPool
+from .exceptions import AppAccessError
 from IPython.core.getipython import get_ipython
 
 def ast_parse(code):
@@ -77,8 +80,14 @@ class NotebookMgr(SingletonConfigurable):
     def notebook_pixieapps(self):
         return list(self.pixieapps.values())
 
+    def _process_security(self, notebook):
+        security = notebook.get("metadata", {}).get("pixiedust", {}).get("security", "token")
+        if security == "token":
+            notebook.get("metadata", {}).get("pixiedust", {})["security"] = "token:{}".format(uuid4().hex)
+
     @gen.coroutine
     def publish(self, name, notebook):
+        self._process_security(notebook)
         full_path = os.path.join(self.notebook_dir, name)
         pixieapp_def = self.read_pixieapp_def(notebook)
         log_messages = ["Validating Notebook... Looking for a PixieApp"]
@@ -90,7 +99,10 @@ class NotebookMgr(SingletonConfigurable):
                 nbformat.write(notebook, f, version=nbformat.NO_CONVERT)
             log_messages.append("Successfully stored notebook file {}".format(name))
             yield ManagedClientPool.instance().on_publish(pixieapp_def, log_messages)
-            pixieapp_model = {"log":log_messages}
+            pixieapp_model = {
+                "log":log_messages,
+                "url": pixieapp_def.url
+            }
             pixieapp_model.update(pixieapp_def.to_dict())
             raise gen.Return(pixieapp_model)
         else:
@@ -169,6 +181,9 @@ class PixieappDef():
         self.title = pixiedust_meta.get("title",None)
         self.deps = pixiedust_meta.get("imports", {})
         self.pref_kernel = pixiedust_meta.get("kernel", None)
+        self.security = pixiedust_meta.get("security", None)
+        self.token = self.security.split(":") if self.security is not None else None
+        self.token = self.token[1] if self.token is not None and len(self.token) == 2 and self.token[0] == "token" else None
 
         #validate and process the code
         self.symbols = get_symbol_table(ast_parse(self.raw_warmup_code + "\n" + self.raw_run_code))
@@ -205,6 +220,17 @@ class PixieappDef():
         else:
             self._run_code = ""
         return self._run_code
+
+    @property
+    def url(self):
+        url_token = "?token={}".format(self.token) if self.token is not None else ""
+        return "/pixieapp/{}{}".format(self.name, url_token)
+
+    def validate_security(self, request_handler):
+        if self.token is not None:
+            url_token = request_handler.get_argument('token', None)
+            if url_token != self.token:
+                raise AppAccessError()
 
     def to_dict(self):
         return {
@@ -357,6 +383,7 @@ class RewriteGlobals(ast.NodeTransformer):
             if isinstance(dec, ast.Name) and dec.id == "PixieApp":
                 self.pixieApp = node.name
                 self.pixieAppRootNode = node
+                self.assign_namespace(node)
         if self.pixieApp != node.name and self.level == 1 and self.isGlobal(node.name):
             node.name = self.namespace + node.name
         return node
@@ -373,3 +400,42 @@ class RewriteGlobals(ast.NodeTransformer):
     @onvisit
     def generic_visit(self, node):
         return node
+
+    def assign_namespace(self, root):
+        setup_def = [func for func in root.body if isinstance(func, ast.FunctionDef) and func.name == 'setup']
+        setup_def = None if len(setup_def) == 0 else setup_def[0]
+        if setup_def is None:
+            setup_node = ast.FunctionDef(
+                name='setup',
+                args=ast.arguments(
+                    args=[ast.arg(arg='self', annotation=None) if six.PY3 else ast.Name(id='self', ctx=ast.Param())],
+                    vararg=None, kwarg=None, defaults=[]
+                ),
+                body=[self.get_assign_node(self.namespace)],
+                decorator_list=[]
+            )
+            root.body.append(setup_node)
+        else:
+            assign_node = [assign for assign in setup_def.body 
+                if isinstance(assign, ast.Assign) and self.has_target(assign.targets, "__pd_gateway_namespace__")
+            ]
+            if len(assign_node) == 0:
+                setup_def.body.append(self.get_assign_node(self.namespace))
+
+    def has_target(self, targets, name):
+        for target in targets:
+            if isinstance(target, ast.Attribute) and target.attr == name:
+                return True
+        return False
+
+    def get_assign_node(self, namespace):
+        return ast.Assign(
+            targets=[
+                ast.Attribute(
+                    value=ast.Name(id='self', ctx=ast.Load()), 
+                    attr='__pd_gateway_namespace__', 
+                    ctx=ast.Store()
+                )
+            ], 
+            value=ast.Str(s=namespace)
+        )
