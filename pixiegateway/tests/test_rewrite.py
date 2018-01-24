@@ -99,8 +99,10 @@ class TestApp""" + classdef + """:
     def setup(self):
         self.contents = [ns_var1, ns_var2]
         self.__pd_gateway_namespace__ = 'ns_'
+        self.append_metadata({'key1': 'value1'})
 TestApp().run()
-    """
+    """,
+    'metadata': {'key1':'value1'}
 },{
     "src":"""
 from pixiedust.display.app import *
@@ -116,8 +118,10 @@ class TestAppWithoutSetup""" + classdef + """:
     pass
     def setup(self):
         self.__pd_gateway_namespace__ = 'ns_'
+        self.append_metadata({'key1': 'value1'})
 TestApp().run()
-    """
+    """,
+    'metadata': {'key1':'value1'}
 }
 ]
 
@@ -130,5 +134,5 @@ def compare_multiline(src, target):
 def test_rewrite():
     for code in code_map:
         symbols = get_symbol_table(ast_parse( code['src'].strip() ) )
-        rewrite_code = astunparse.unparse( RewriteGlobals(symbols, "ns_").visit(ast_parse(code['src'])) )
+        rewrite_code = astunparse.unparse( RewriteGlobals(symbols, "ns_", code.get('metadata', None)).visit(ast_parse(code['src'])) )
         compare_multiline(code["target"].strip(), [l for l in rewrite_code.split('\n') if l.strip() != ""])
