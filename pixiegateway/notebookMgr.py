@@ -447,7 +447,9 @@ class RewriteGlobals(ast.NodeTransformer):
                     values=[ ast.Str(s=key) for key in metadata.values()]
                 )
             ], 
-            keywords=[]
+            keywords=[],
+            starargs=None, 
+            kwargs=None
         ))
 
     def get_assign_node(self, namespace):
