@@ -167,9 +167,18 @@ class PixieAppHandler(BaseHandler):
         managed_client = yield self.session.get_managed_client(self, pixieapp_def, True)
         if pixieapp_def is not None:
             yield pixieapp_def.warmup(managed_client)
+            query = self.request.query.strip()
+            metadata = dict(
+                [tuple(parts) if len(parts)>1 else (parts[0], "") 
+                    for group in query.split("&") 
+                    for parts in [group.split("=")]
+                ]
+            ) if query else None
+            print("path is {}".format(metadata))
             code = pixieapp_def.get_run_code(
                 self.session,
-                self.session.get_pixieapp_run_id(self, pixieapp_def)
+                self.session.get_pixieapp_run_id(self, pixieapp_def),
+                app_metadata = metadata
             )
         else:
             instance_name = self.session.getInstanceName(clazz)

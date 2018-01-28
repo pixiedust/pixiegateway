@@ -268,9 +268,9 @@ class PixieappDef():
                         raise exc
         raise gen.Return(warmup_future)
 
-    def get_run_code(self, session, run_id):
+    def get_run_code(self, session, run_id, app_metadata = None):
         pars = ast.parse(self.run_code)
-        vl = RewriteGlobals(get_symbol_table(pars), session.namespace)
+        vl = RewriteGlobals(get_symbol_table(pars), session.namespace, app_metadata)
         vl.visit(pars)
         run_code = """
 from pixiedust.display.app import pixieapp
@@ -334,9 +334,10 @@ class VarsLookup(ast.NodeVisitor):
         pass
 
 class RewriteGlobals(ast.NodeTransformer):    
-    def __init__(self, symbols, namespace):
+    def __init__(self, symbols, namespace, app_metadata = None):
         self.symbols = symbols
         self.namespace = namespace
+        self.app_metadata = app_metadata
         self.level = 0
         self.localTables = []
         self.pixieApp = None
@@ -405,13 +406,16 @@ class RewriteGlobals(ast.NodeTransformer):
         setup_def = [func for func in root.body if isinstance(func, ast.FunctionDef) and func.name == 'setup']
         setup_def = None if len(setup_def) == 0 else setup_def[0]
         if setup_def is None:
+            body = [self.get_assign_node(self.namespace)]
+            if self.app_metadata:
+                body.append(self.get_call_append_metadata_node(self.app_metadata))
             setup_node = ast.FunctionDef(
                 name='setup',
                 args=ast.arguments(
                     args=[ast.arg(arg='self', annotation=None) if six.PY3 else ast.Name(id='self', ctx=ast.Param())],
                     vararg=None, kwarg=None, defaults=[]
                 ),
-                body=[self.get_assign_node(self.namespace)],
+                body=body,
                 decorator_list=[]
             )
             root.body.append(setup_node)
@@ -421,12 +425,32 @@ class RewriteGlobals(ast.NodeTransformer):
             ]
             if len(assign_node) == 0:
                 setup_def.body.append(self.get_assign_node(self.namespace))
+            if self.app_metadata:
+                setup_def.body.append(self.get_call_append_metadata_node(self.app_metadata))
 
     def has_target(self, targets, name):
         for target in targets:
             if isinstance(target, ast.Attribute) and target.attr == name:
                 return True
         return False
+
+    def get_call_append_metadata_node(self, metadata):
+        return ast.Expr(value= ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id='self', ctx=ast.Load()), 
+                attr='append_metadata', 
+                ctx=ast.Load()
+            ), 
+            args=[
+                ast.Dict(
+                    keys=[ ast.Str(s=key) for key in metadata.keys()],
+                    values=[ ast.Str(s=key) for key in metadata.values()]
+                )
+            ], 
+            keywords=[],
+            starargs=None, 
+            kwargs=None
+        ))
 
     def get_assign_node(self, namespace):
         return ast.Assign(
