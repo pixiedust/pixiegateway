@@ -171,7 +171,7 @@ class PixieAppHandler(BaseHandler):
             metadata = dict(
                 [tuple(parts) if len(parts)>1 else (parts[0], "") 
                     for group in query.split("&") 
-                    for parts in [group.split("=")]
+                    for parts in [group.split("=")] if parts[0] != "token"
                 ]
             ) if query else None
             print("path is {}".format(metadata))

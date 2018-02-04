@@ -34,6 +34,7 @@ class ManagedClient(object):
     def __init__(self, kernel_manager, kernel_name=None):
         self.kernel_manager = kernel_manager
         self.kernel_name = kernel_name
+        self.start_exception = None
         self.current_iopub_handler = None
         self.installed_modules = []
         self.app_stats = None
@@ -71,6 +72,7 @@ class ManagedClient(object):
         self.app_stats = ManagedClientAppMetrics()
         self.run_stats = ManagedClientRunMetrics()
         def on_failure(exc):
+            self.start_exception = exc
             app_log.error("Kernel not started correctly: %s", exc)
         self.kernel_handle = yield gen.maybe_future(self.kernel_manager.start_kernel(
             kernel_name=kernel_name,
@@ -343,4 +345,5 @@ class ManagedClientPool(SingletonConfigurable):
 
     def get_stats(self, kernel_id=None):
         return {mc.kernel_id:mc.get_stats() for mc in self.managed_clients
-                if kernel_id is None or mc.kernel_id == kernel_id}
+                if mc.start_exception is None and (kernel_id is None or mc.kernel_id == kernel_id)
+                }

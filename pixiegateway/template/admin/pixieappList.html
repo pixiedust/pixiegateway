@@ -5,6 +5,7 @@
                 <th>PixieApp Name</th>
                 <th>Description</th>
                 <th>Notebook Location</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -13,6 +14,11 @@
                 <td><a target="_blank" href="{{p.url}}">{{p.name}}</td>
                 <td>{{p.description}}</td>
                 <td>{{p.location}}</td>
+                <td>
+                    <button type="button" class="btn btn-default" title="Delete {{p.name}}">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </td>
             </tr>
             {% end %}
         </tbody>
