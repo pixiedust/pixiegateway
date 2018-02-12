@@ -44,7 +44,7 @@
                 <div id="contents">
                     {% set path = content_definition['path'] %}
                     {% set args = content_definition['args']() if 'args' in content_definition else {} %}
-                    {% module Template("template/" + path, **args) %}
+                    {% module Template("/template/" + path, **args) %}
                 </div>
             </div>
         </div>

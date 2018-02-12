@@ -124,6 +124,28 @@ class NotebookMgr(SingletonConfigurable):
         """
         return self.pixieapps.get(pixieAppName, None)
 
+    @gen.coroutine
+    def delete_notebook_pixieapp(self, pixieAppName):
+        pixieapp_def = self.get_notebook_pixieapp(pixieAppName)
+        if not pixieapp_def:
+            raise Exception("Invalid Input given")
+
+        log_messages = ["Notifying kernel of pixieapp deletion... "]
+        results = {
+            "status_code": 200,
+            "messages": log_messages
+        }
+        try:
+            yield ManagedClientPool.instance().on_delete(pixieapp_def, log_messages)
+            log_message = ["Deleting physical instance of the Notebook"]
+            os.remove(pixieapp_def.location)
+            self.pixieapps.pop(pixieAppName)
+            log_message = ["Successfully delete app {}".format(pixieAppName)]
+        except Exception as exc:
+            results["status_code"] = 500
+            log_messages.append("Unexpected error occured: {}".format(exc))
+        raise gen.Return(results)
+
     def _readNotebooks(self):
         app_log.debug("Reading notebooks from notebook_dir %s", self.notebook_dir)
         if self.notebook_dir is None:

@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------------
-# Copyright IBM Corp. 2017
+# Copyright IBM Corp. 2018
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
@@ -166,6 +166,10 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
         raise gen.Return(future)
 
     @gen.coroutine
+    def on_delete(self, pixieapp_def, log_messages):
+        pass
+
+    @gen.coroutine
     def restart(self):
         with (yield self.lock.acquire()):
             yield gen.maybe_future(self.shutdown())
@@ -310,12 +314,20 @@ class ManagedClientPool(SingletonConfigurable):
             managed_client.shutdown()
 
     def on_publish(self, pixieapp_def, log_messages):
-        #find all the affect clients
+        #find all the affected clients
         try:
             log_messages.append("Validating Kernels for publishing...")
             return [managed_client.on_publish(pixieapp_def, log_messages) for managed_client in self.managed_clients]
         finally:
             log_messages.append("Done Validating Kernels...")
+
+    def on_delete(self, pixieapp_def, log_messages):
+        try:
+            log_messages.append("Notifying Kernels for deletion...")
+            return [managed_client.on_delete(pixieapp_def, log_messages) for managed_client in self.managed_clients]
+        finally:
+            log_messages.append("Done Notifying Kernels...")
+
 
     @gen.coroutine
     def get(self, pixieapp_def=None):

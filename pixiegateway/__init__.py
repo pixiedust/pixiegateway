@@ -19,15 +19,11 @@ import tornado
 from tornado.concurrent import Future
 from tornado import gen, locks
 from tornado.log import app_log
+import pixiegateway.handlers as handlers
 from .pixieGatewayApp import PixieGatewayApp
 from .managedClient import ManagedClient, ManagedClientPool
 from .session import SessionManager
 from .notebookMgr import NotebookMgr
-from .handlers import (
-    PixieDustHandler, PixieDustLogHandler, ExecuteCodeHandler, PixieAppHandler,
-    PixieAppListHandler, PixieAppPublishHandler, ChartShareHandler, StatsHandler,
-    AdminHandler, ChartEmbedHandler, ChartsHandler, OEmbedChartHandler, LoginHandler
-)
 
 def main():
     os.environ['PIXIEDUST_DB_NAME'] = "gateway.db"
@@ -54,20 +50,21 @@ class PixieGatewayTemplatePersonality(LoggingConfigurable):
         return [
             (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
             (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": os.path.join(os.path.dirname(__file__), "static")}),
-            (r'/login', LoginHandler),
-            (r"/pixiedustLog", PixieDustLogHandler),
-            (r"/pixiedust.js", PixieDustHandler, {'loadjs':True}),
-            (r"/pixiedust.css", PixieDustHandler, {'loadjs':False}),
-            (r"/executeCode/(.*)", ExecuteCodeHandler),
-            (r"/pixieapp/(.*)", PixieAppHandler),
-            (r"/admin(?:/(?P<tab_id>(?:.*))?)?", AdminHandler),
-            (r"/pixieapps", PixieAppListHandler),
-            (r"/publish/(?P<name>(?:.*))", PixieAppPublishHandler),
-            (r"/chart(?:/(?P<chart_id>(?:.*))?)?", ChartShareHandler),
-            (r"/embed(?:/(?P<chart_id>[^/]*)(?:/(?P<width>\d+))?(?:/(?P<height>\d+))?)?", ChartEmbedHandler),
-            (r"/oembed/chart", OEmbedChartHandler),
-            (r"/stats(?:/(?P<command>(?:.*))?)?", StatsHandler),
-            (r"/charts(?:/(?P<page_num>[^/]*)(?:/(?P<page_size>\d+))?)?", ChartsHandler)
+            (r'/login', handlers.LoginHandler),
+            (r"/pixiedustLog", handlers.PixieDustLogHandler),
+            (r"/pixiedust.js", handlers.PixieDustHandler, {'loadjs':True}),
+            (r"/pixiedust.css", handlers.PixieDustHandler, {'loadjs':False}),
+            (r"/executeCode/(.*)", handlers.ExecuteCodeHandler),
+            (r"/pixieapp/(.*)", handlers.PixieAppHandler),
+            (r"/admin(?:/(?P<tab_id>(?:.*))?)?", handlers.AdminHandler),
+            (r"/admincommand(?:/(?P<command>(?:.*))?)?", handlers.AdminCommandHandler),
+            (r"/pixieapps", handlers.PixieAppListHandler),
+            (r"/publish/(?P<name>(?:.*))", handlers.PixieAppPublishHandler),
+            (r"/chart(?:/(?P<chart_id>(?:.*))?)?", handlers.ChartShareHandler),
+            (r"/embed(?:/(?P<chart_id>[^/]*)(?:/(?P<width>\d+))?(?:/(?P<height>\d+))?)?", handlers.ChartEmbedHandler),
+            (r"/oembed/chart", handlers.OEmbedChartHandler),
+            (r"/stats(?:/(?P<command>(?:.*))?)?", handlers.StatsHandler),
+            (r"/charts(?:/(?P<page_num>[^/]*)(?:/(?P<page_size>\d+))?)?", handlers.ChartsHandler)
         ]
 
     def should_seed_cell(self, code):

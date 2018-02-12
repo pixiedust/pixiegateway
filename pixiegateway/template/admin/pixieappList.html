@@ -15,7 +15,7 @@
                 <td>{{p.description}}</td>
                 <td>{{p.location}}</td>
                 <td>
-                    <button type="button" class="btn btn-default" title="Delete {{p.name}}">
+                    <button type="button" class="btn btn-default" delete_pixie_app="{{p.name}}" title="Delete {{p.name}}">
                         <i class="fa fa-trash"></i>
                     </button>
                 </td>
@@ -24,3 +24,24 @@
         </tbody>
     </table>
 </div>
+
+<script>
+    $("button[delete_pixie_app]").click(function(){
+        var app_name = $(this).attr("delete_pixie_app");
+        if (confirm("Delete " + app_name + ". OK?")){
+            $.get({
+                url: "/admincommand/delete_app/" + app_name,
+                contentType: "application/json",
+                success: function(data){
+                    debugger;
+                    // data = JSON.parse(data);
+                    console.log("result: ", data);
+                },
+                error: function(data){
+                    debugger;
+                    console.log("error: ", data);
+                }
+        });
+        }
+    })
+</script>
