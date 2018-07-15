@@ -13,19 +13,19 @@ From a PixieDust chart or PixieApp in a Jupyter Notebook, publishing your work v
 Install the pixiegateway package from PyPi. On the command line, run the following (Note: PixieGateway supports both Python 2.7 and 3.x):
 
 ```
-pip install pixiegateway
+$ pip install pixiegateway
 ```
 
 Start the PixieGateway with a simple command:
 
 ```
-jupyter pixiegateway --port <portnumber>
+$ jupyter pixiegateway --port <portnumber>
 ```
 
 Example output:
 
 ```
-dtaieb$ jupyter pixiegateway --port 8899
+$ jupyter pixiegateway --port 8899
 [PixieGatewayApp] Kernel started: b5be0b3b-a018–4ace-95d1-d94b556a0bfe
 kernel client initialized
 [PixieGatewayApp] Jupyter Kernel Gateway at http://127.0.0.1:8899
@@ -45,6 +45,6 @@ Additionally, these blog articles provide more context on the development and ua
 
 **Apache License, Version 2.0**. 
 
-For details and all the legalese, [read LICENSE](https://github.com/ibm-watson-data-lab/pixiegateway/blob/master/LICENSE).
+For details and all the legalese, [read LICENSE](https://github.com/pixiedust/pixiegateway/blob/master/LICENSE).
 
 
