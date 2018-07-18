@@ -34,16 +34,17 @@
         </div>
         <div class="col-xs-12 col-sm-10 adminContents">
             <div class="admin-content-title">
+                <span><img style="width:30px;float:left" src="https://github.com/ibm-watson-data-lab/pixiedust/raw/master/docs/_static/pd_logo_64px.png"></img></span>
                 <span>{{content_definition.get('description', "")}}</span>
             </div>
 
             <div class="admin-content-main">
-                {%include "../logo.html"%}
+                {#%include "../logo.html"%#}
 
                 <div id="contents">
                     {% set path = content_definition['path'] %}
                     {% set args = content_definition['args']() if 'args' in content_definition else {} %}
-                    {% module Template("template/" + path, **args) %}
+                    {% module Template("/template/" + path, **args) %}
                 </div>
             </div>
         </div>

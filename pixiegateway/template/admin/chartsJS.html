@@ -37,7 +37,8 @@
                             '  <td>' +
                             '    <a target="_blank" href="/chart/' + c['CHARTID'] + '" tabindex="0">link</a> | ' +
                             '    <a data-html="true" data-toggle="popover" title="' + c['CHARTID'] + '" tabindex="0" ' +
-                            '       data-content=\'<object type="text/html" data="/embed/' + c['CHARTID'] + '/300/200" width="300" height="200"></object>\'>preview</a>' +
+                            '       data-content=\'<object type="text/html" data="/embed/' + c['CHARTID'] + '/300/200" width="300" height="200"></object>\'>preview</a> |' +
+                            '    <a href="#" title="delete' + c['CHARTID'] + '" tabindex="0">delete</a> ' +
                             '  </td>' +
                             '</tr>'
                         )

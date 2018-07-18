@@ -53,7 +53,7 @@ class PixieGatewayApp(KernelGatewayApp):
 
     @default('prepend_execute_code')
     def prepend_execute_code_default(self):
-        return ""
+        return os.getenv("PREPEND_EXECUTE_CODE", '')
 
     @default('admin_password')
     def admin_password_default(self):

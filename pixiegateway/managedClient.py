@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------------
-# Copyright IBM Corp. 2017
+# Copyright IBM Corp. 2018
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ class ManagedClient(object):
     def __init__(self, kernel_manager, kernel_name=None):
         self.kernel_manager = kernel_manager
         self.kernel_name = kernel_name
+        self.start_exception = None
         self.current_iopub_handler = None
         self.installed_modules = []
         self.app_stats = None
@@ -71,6 +72,7 @@ class ManagedClient(object):
         self.app_stats = ManagedClientAppMetrics()
         self.run_stats = ManagedClientRunMetrics()
         def on_failure(exc):
+            self.start_exception = exc
             app_log.error("Kernel not started correctly: %s", exc)
         self.kernel_handle = yield gen.maybe_future(self.kernel_manager.start_kernel(
             kernel_name=kernel_name,
@@ -162,6 +164,10 @@ print(json.dumps( {"installed_modules": list(pkg_resources.AvailableDistribution
             log_messages.append("Kernel successfully restarted...")
         future.set_result("OK")
         raise gen.Return(future)
+
+    @gen.coroutine
+    def on_delete(self, pixieapp_def, log_messages):
+        pass
 
     @gen.coroutine
     def restart(self):
@@ -308,12 +314,20 @@ class ManagedClientPool(SingletonConfigurable):
             managed_client.shutdown()
 
     def on_publish(self, pixieapp_def, log_messages):
-        #find all the affect clients
+        #find all the affected clients
         try:
             log_messages.append("Validating Kernels for publishing...")
             return [managed_client.on_publish(pixieapp_def, log_messages) for managed_client in self.managed_clients]
         finally:
             log_messages.append("Done Validating Kernels...")
+
+    def on_delete(self, pixieapp_def, log_messages):
+        try:
+            log_messages.append("Notifying Kernels for deletion...")
+            return [managed_client.on_delete(pixieapp_def, log_messages) for managed_client in self.managed_clients]
+        finally:
+            log_messages.append("Done Notifying Kernels...")
+
 
     @gen.coroutine
     def get(self, pixieapp_def=None):
@@ -343,4 +357,5 @@ class ManagedClientPool(SingletonConfigurable):
 
     def get_stats(self, kernel_id=None):
         return {mc.kernel_id:mc.get_stats() for mc in self.managed_clients
-                if kernel_id is None or mc.kernel_id == kernel_id}
+                if mc.start_exception is None and (kernel_id is None or mc.kernel_id == kernel_id)
+                }
