@@ -47,7 +47,7 @@ class LoginHandler(BaseHandler):
         return userid == self.settings.get("admin_user_id","admin") and password == self.settings.get("admin_password")
     def post(self):
         if not self.validate_credentials(self.get_argument("userid"), self.get_argument("password")):
-            return self.render("template/login.html", error="Incorrect userid or password")
+            return self.render("/template/login.html", error="Incorrect userid or password")
         self.set_secure_cookie("pd_user", self.get_argument("userid"))
         self.redirect(self.get_argument("next"))
 
